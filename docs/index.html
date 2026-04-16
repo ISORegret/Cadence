@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Cadence — pay-period budgeting on your device. Android APK or install the web app on iPhone."
+    />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400..600;1,14..32,400..600&display=swap"
+      rel="stylesheet"
+    />
+    <title>Cadence — budget between paychecks</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --accent: #059669;
+        --accent-hover: #047857;
+        --border: rgba(15, 23, 42, 0.08);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #09090b;
+          --card: #18181b;
+          --text: #f4f4f5;
+          --muted: #a1a1aa;
+          --border: rgba(255, 255, 255, 0.08);
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          'Inter',
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        min-height: 100vh;
+      }
+      .wrap {
+        max-width: 52rem;
+        margin: 0 auto;
+        padding: 2rem 1.25rem 4rem;
+      }
+      header {
+        margin-bottom: 2.5rem;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 0.75rem;
+      }
+      h1 {
+        font-size: clamp(1.75rem, 4vw, 2.25rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        margin: 0 0 0.75rem;
+      }
+      .lead {
+        font-size: 1.05rem;
+        color: var(--muted);
+        max-width: 38rem;
+        margin: 0;
+      }
+      .grid {
+        display: grid;
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+      @media (min-width: 640px) {
+        .grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      }
+      .card h2 {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin: 0 0 0.5rem;
+      }
+      .card p {
+        font-size: 0.9rem;
+        color: var(--muted);
+        margin: 0 0 1rem;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 2.75rem;
+        padding: 0 1.25rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        border-radius: 0.75rem;
+        text-decoration: none;
+        transition:
+          background 0.15s,
+          transform 0.1s;
+      }
+      .btn:active {
+        transform: scale(0.98);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: var(--accent-hover);
+      }
+      .btn-secondary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .btn-secondary:hover {
+        background: rgba(15, 23, 42, 0.04);
+      }
+      @media (prefers-color-scheme: dark) {
+        .btn-secondary:hover {
+          background: rgba(255, 255, 255, 0.06);
+        }
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .note {
+        margin-top: 2rem;
+        padding: 1rem 1.25rem;
+        border-radius: 0.75rem;
+        background: rgba(5, 150, 105, 0.08);
+        border: 1px solid rgba(5, 150, 105, 0.2);
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .note strong {
+        color: var(--text);
+      }
+      ol.steps {
+        margin: 0.75rem 0 0;
+        padding-left: 1.25rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      ol.steps li {
+        margin-bottom: 0.35rem;
+      }
+      footer {
+        margin-top: 3rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+      footer a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <p class="badge">Cadence</p>
+        <h1>Budget between paychecks</h1>
+        <p class="lead">
+          Plan bills and cashflow around your pay dates. Your data stays on your device — no bank
+          linking required.
+        </p>
+      </header>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Android</h2>
+          <p>Install the native app (APK). Best experience for notifications and offline use.</p>
+          <div class="stack">
+            <a id="apk-link" class="btn btn-primary" href="#">Download APK (GitHub Releases)</a>
+            <a id="releases-link" class="btn btn-secondary" href="#">All releases</a>
+          </div>
+        </div>
+        <div class="card">
+          <h2>iPhone &amp; iPad</h2>
+          <p>
+            Use the web app in Safari, then add it to your Home Screen — it runs like an app (PWA).
+          </p>
+          <div class="stack">
+            <a id="web-link" class="btn btn-primary" href="./app/">Open web app</a>
+          </div>
+          <ol class="steps">
+            <li>Open the link above in <strong>Safari</strong>.</li>
+            <li>Tap the <strong>Share</strong> button.</li>
+            <li>Tap <strong>Add to Home Screen</strong>, then Add.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="note">
+        <strong>Privacy.</strong> Cadence does not connect to your bank. Budgets and reminders use
+        data you enter on this device.
+      </div>
+
+      <footer>
+        <p id="repo-line">
+          Repo: <a id="repo-link" href="#">GitHub</a>
+        </p>
+      </footer>
+    </div>
+    <script>
+      ;(function () {
+        var repo = 'GITHUB_REPO_PLACEHOLDER'
+        if (repo.indexOf('GITHUB_REPO') !== -1) {
+          repo = ''
+        }
+        var base = ''
+        try {
+          var p = window.location.pathname
+          if (p.endsWith('/index.html')) base = p.slice(0, -'/index.html'.length)
+          else if (p.endsWith('/')) base = p.slice(0, -1)
+          else base = p.replace(/\/[^/]*$/, '') || ''
+        } catch (e) {}
+        var web = document.getElementById('web-link')
+        if (web && base) web.setAttribute('href', base + '/app/')
+        var gh = 'https://github.com/' + repo
+        var rel = gh + '/releases/latest'
+        var apk = document.getElementById('apk-link')
+        var releases = document.getElementById('releases-link')
+        var repoLink = document.getElementById('repo-link')
+        if (repo && apk) {
+          apk.setAttribute('href', rel)
+          apk.textContent = 'Download APK (latest release)'
+        }
+        if (repo && releases) releases.setAttribute('href', gh + '/releases')
+        if (repo && repoLink) {
+          repoLink.setAttribute('href', gh)
+          repoLink.textContent = repo
+        }
+        if (!repo && apk) {
+          apk.setAttribute('href', './app/')
+          apk.textContent = 'Open web app (same as Android browser)'
+        }
+      })()
+    </script>
+  </body>
+</html>

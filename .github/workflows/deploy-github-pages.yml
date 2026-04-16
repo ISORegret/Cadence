@@ -1,0 +1,61 @@
+# Builds the PWA with base /REPO_NAME/app/, adds the marketing page from docs/,
+# and deploys to GitHub Pages. Enable: Settings → Pages → Source: GitHub Actions.
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build PWA for GitHub Pages
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/app/
+        run: npm run build
+
+      - name: Assemble site (landing + app + SPA fallback)
+        env:
+          REPO_FULL: ${{ github.repository }}
+        run: |
+          mkdir -p _site/app
+          cp docs/index.html _site/index.html
+          sed -i "s|GITHUB_REPO_PLACEHOLDER|${REPO_FULL}|g" _site/index.html
+          cp public/favicon.svg _site/favicon.svg
+          cp -r dist/. _site/app/
+          cp _site/app/index.html _site/app/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
