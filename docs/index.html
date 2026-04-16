@@ -5,37 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Cadence — pay-period budgeting on your device. Android APK or install the web app on iPhone."
+      content="Cadence — plan spending around your real paydays. Bills, cashflow, and budgets on your phone. No bank linking."
     />
+    <meta name="theme-color" content="#ecfdf5" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400..600;1,14..32,400..600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400..700;1,14..32,400..700&display=swap"
       rel="stylesheet"
     />
-    <title>Cadence — budget between paychecks</title>
+    <title>Cadence — budget built around your paychecks</title>
     <style>
       :root {
-        --bg: #f4f6f8;
-        --card: #ffffff;
-        --text: #0f172a;
+        --ink: #0f172a;
         --muted: #64748b;
-        --accent: #059669;
-        --accent-hover: #047857;
-        --border: rgba(15, 23, 42, 0.08);
+        --muted2: #94a3b8;
+        --surface: #ffffff;
+        --line: rgba(15, 23, 42, 0.08);
+        --emerald: #059669;
+        --emerald-dim: #047857;
+        --emerald-glow: rgba(5, 150, 105, 0.35);
+        --hero-bg: #f8fafc;
+        --card-shadow: 0 4px 24px -4px rgba(15, 23, 42, 0.07);
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #09090b;
-          --card: #18181b;
-          --text: #f4f4f5;
-          --muted: #a1a1aa;
-          --border: rgba(255, 255, 255, 0.08);
+          --ink: #f8fafc;
+          --muted: #94a3b8;
+          --muted2: #64748b;
+          --surface: #18181b;
+          --line: rgba(255, 255, 255, 0.09);
+          --hero-bg: #09090b;
+          --card-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.45);
         }
       }
-      * {
+      *,
+      *::before,
+      *::after {
         box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
       }
       body {
         margin: 0;
@@ -44,96 +55,486 @@
           system-ui,
           -apple-system,
           sans-serif;
-        background: var(--bg);
-        color: var(--text);
+        background: var(--hero-bg);
+        color: var(--ink);
         line-height: 1.6;
-        min-height: 100vh;
+        font-size: 1rem;
+        -webkit-font-smoothing: antialiased;
       }
-      .wrap {
-        max-width: 52rem;
+      .noise {
+        pointer-events: none;
+        position: fixed;
+        inset: 0;
+        opacity: 0.03;
+        z-index: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+      .hero-bg {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        z-index: 0;
+      }
+      .hero-bg::before {
+        content: '';
+        position: absolute;
+        width: 140%;
+        height: 80%;
+        top: -30%;
+        left: -20%;
+        background: radial-gradient(
+          ellipse 80% 60% at 50% -10%,
+          rgba(5, 150, 105, 0.22),
+          transparent 55%
+        );
+      }
+      .hero-bg::after {
+        content: '';
+        position: absolute;
+        width: 60%;
+        height: 50%;
+        bottom: -10%;
+        right: -15%;
+        background: radial-gradient(
+          circle at 70% 80%,
+          rgba(14, 165, 233, 0.12),
+          transparent 50%
+        );
+      }
+      .shell {
+        position: relative;
+        z-index: 1;
+        max-width: 72rem;
         margin: 0 auto;
-        padding: 2rem 1.25rem 4rem;
+        padding: 0 1.25rem 5rem;
       }
-      header {
-        margin-bottom: 2.5rem;
+      nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.25rem 0 2rem;
       }
-      .badge {
-        display: inline-block;
-        font-size: 0.65rem;
-        font-weight: 600;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: var(--accent);
-        margin-bottom: 0.75rem;
-      }
-      h1 {
-        font-size: clamp(1.75rem, 4vw, 2.25rem);
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
         font-weight: 700;
-        letter-spacing: -0.02em;
-        line-height: 1.2;
-        margin: 0 0 0.75rem;
+        font-size: 1.1rem;
+        letter-spacing: -0.03em;
+        color: var(--ink);
+        text-decoration: none;
       }
-      .lead {
-        font-size: 1.05rem;
-        color: var(--muted);
-        max-width: 38rem;
-        margin: 0;
+      .logo svg {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 0.5rem;
       }
-      .grid {
-        display: grid;
-        gap: 1rem;
-        margin-top: 2rem;
+      .nav-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.55rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #fff;
+        background: linear-gradient(135deg, var(--emerald) 0%, #0d9488 100%);
+        border-radius: 999px;
+        text-decoration: none;
+        box-shadow: 0 2px 12px var(--emerald-glow);
+        transition:
+          transform 0.15s,
+          box-shadow 0.2s;
       }
-      @media (min-width: 640px) {
-        .grid {
-          grid-template-columns: 1fr 1fr;
+      .nav-cta:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 20px var(--emerald-glow);
+      }
+      .hero {
+        text-align: center;
+        padding-bottom: 3.5rem;
+      }
+      .hero-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.9rem;
+        margin-bottom: 1.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--emerald-dim);
+        background: rgba(5, 150, 105, 0.1);
+        border: 1px solid rgba(5, 150, 105, 0.2);
+        border-radius: 999px;
+      }
+      @media (prefers-color-scheme: dark) {
+        .hero-pill {
+          color: #6ee7b7;
+          background: rgba(5, 150, 105, 0.15);
+          border-color: rgba(52, 211, 153, 0.25);
         }
       }
-      .card {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 1rem;
-        padding: 1.5rem;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      .hero h1 {
+        margin: 0 auto 1rem;
+        max-width: 18ch;
+        font-size: clamp(2.25rem, 6vw, 3.25rem);
+        font-weight: 700;
+        letter-spacing: -0.045em;
+        line-height: 1.08;
       }
-      .card h2 {
-        font-size: 1.05rem;
-        font-weight: 600;
-        margin: 0 0 0.5rem;
-      }
-      .card p {
-        font-size: 0.9rem;
+      .hero .tagline {
+        margin: 0 auto 2rem;
+        max-width: 36rem;
+        font-size: 1.125rem;
         color: var(--muted);
-        margin: 0 0 1rem;
+        line-height: 1.65;
+      }
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        justify-content: center;
+        margin-bottom: 2.5rem;
       }
       .btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 2.75rem;
-        padding: 0 1.25rem;
-        font-size: 0.9rem;
+        gap: 0.5rem;
+        min-height: 3rem;
+        padding: 0 1.35rem;
+        font-size: 0.9375rem;
         font-weight: 600;
-        border-radius: 0.75rem;
+        border-radius: 0.875rem;
         text-decoration: none;
         transition:
+          transform 0.12s,
           background 0.15s,
-          transform 0.1s;
+          border-color 0.15s;
       }
       .btn:active {
         transform: scale(0.98);
       }
       .btn-primary {
-        background: var(--accent);
         color: #fff;
+        background: linear-gradient(135deg, var(--emerald) 0%, #0d9488 100%);
+        box-shadow: 0 4px 16px var(--emerald-glow);
       }
       .btn-primary:hover {
-        background: var(--accent-hover);
+        filter: brightness(1.05);
+      }
+      .btn-ghost {
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        box-shadow: var(--card-shadow);
+      }
+      .btn-ghost:hover {
+        border-color: rgba(5, 150, 105, 0.35);
+      }
+      .trust {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        justify-content: center;
+        align-items: center;
+        padding: 1rem 0;
+        font-size: 0.8125rem;
+        color: var(--muted2);
+      }
+      .trust span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      .trust svg {
+        flex-shrink: 0;
+        color: var(--emerald);
+        opacity: 0.9;
+      }
+      .mock {
+        margin: 0 auto;
+        max-width: 22rem;
+        padding: 0.5rem;
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.6));
+        border: 1px solid var(--line);
+        border-radius: 1.75rem;
+        box-shadow: var(--card-shadow);
+      }
+      @media (prefers-color-scheme: dark) {
+        .mock {
+          background: linear-gradient(145deg, #27272a, #18181b);
+        }
+      }
+      .mock-inner {
+        border-radius: 1.35rem;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        overflow: hidden;
+      }
+      .mock-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.65rem 1rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--muted);
+        border-bottom: 1px solid var(--line);
+      }
+      .mock-dots {
+        display: flex;
+        gap: 0.25rem;
+      }
+      .mock-dots i {
+        width: 0.4rem;
+        height: 0.4rem;
+        border-radius: 50%;
+        background: var(--line);
+      }
+      .mock-body {
+        padding: 1.25rem 1.15rem 1.5rem;
+        text-align: left;
+      }
+      .mock-label {
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--emerald);
+        margin-bottom: 0.35rem;
+      }
+      .mock-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+        margin-bottom: 0.75rem;
+      }
+      .mock-big {
+        font-size: 1.75rem;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        font-variant-numeric: tabular-nums;
+      }
+      .mock-sub {
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin-top: 0.25rem;
+      }
+      .mock-pill {
+        display: inline-block;
+        margin-top: 1rem;
+        padding: 0.4rem 0.65rem;
+        font-size: 0.7rem;
+        font-weight: 500;
+        color: var(--muted);
+        background: rgba(15, 23, 42, 0.04);
+        border-radius: 0.5rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        .mock-pill {
+          background: rgba(255, 255, 255, 0.06);
+        }
+      }
+      section {
+        margin-top: 4rem;
+      }
+      .section-head {
+        text-align: center;
+        max-width: 36rem;
+        margin: 0 auto 2.5rem;
+      }
+      .section-head h2 {
+        margin: 0 0 0.75rem;
+        font-size: clamp(1.5rem, 3.5vw, 1.875rem);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+      .section-head p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 1.05rem;
+        line-height: 1.6;
+      }
+      .features {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 640px) {
+        .features {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (min-width: 960px) {
+        .features {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      .feat {
+        padding: 1.35rem 1.25rem;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 1.125rem;
+        box-shadow: var(--card-shadow);
+        transition:
+          border-color 0.2s,
+          transform 0.2s;
+      }
+      .feat:hover {
+        border-color: rgba(5, 150, 105, 0.25);
+        transform: translateY(-2px);
+      }
+      .feat-icon {
+        width: 2.5rem;
+        height: 2.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+        border-radius: 0.75rem;
+        background: rgba(5, 150, 105, 0.1);
+        color: var(--emerald);
+      }
+      @media (prefers-color-scheme: dark) {
+        .feat-icon {
+          background: rgba(5, 150, 105, 0.18);
+          color: #6ee7b7;
+        }
+      }
+      .feat h3 {
+        margin: 0 0 0.4rem;
+        font-size: 1rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .feat p {
+        margin: 0;
+        font-size: 0.875rem;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+      .steps {
+        display: grid;
+        gap: 1.25rem;
+        counter-reset: step;
+        max-width: 40rem;
+        margin: 0 auto;
+      }
+      @media (min-width: 768px) {
+        .steps {
+          grid-template-columns: repeat(3, 1fr);
+          max-width: none;
+        }
+      }
+      .step {
+        position: relative;
+        padding: 1.5rem 1.25rem;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        text-align: center;
+      }
+      .step::before {
+        counter-increment: step;
+        content: counter(step);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        margin: 0 auto 1rem;
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, var(--emerald), #0d9488);
+        border-radius: 50%;
+      }
+      .step h3 {
+        margin: 0 0 0.5rem;
+        font-size: 0.9375rem;
+        font-weight: 600;
+      }
+      .step p {
+        margin: 0;
+        font-size: 0.8125rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .download {
+        margin-top: 4rem;
+        padding: 2.5rem 1.5rem;
+        background: linear-gradient(
+          160deg,
+          rgba(5, 150, 105, 0.08) 0%,
+          rgba(14, 165, 233, 0.06) 100%
+        );
+        border: 1px solid var(--line);
+        border-radius: 1.5rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        .download {
+          background: linear-gradient(160deg, rgba(5, 150, 105, 0.12) 0%, rgba(24, 24, 27, 0.8) 100%);
+        }
+      }
+      .download h2 {
+        margin: 0 0 0.5rem;
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+      .download > p {
+        margin: 0 auto 2rem;
+        text-align: center;
+        max-width: 32rem;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      .dl-grid {
+        display: grid;
+        gap: 1rem;
+        max-width: 52rem;
+        margin: 0 auto;
+      }
+      @media (min-width: 700px) {
+        .dl-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .dl-card {
+        padding: 1.75rem;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 1.125rem;
+        box-shadow: var(--card-shadow);
+      }
+      .dl-card h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 0.5rem;
+        font-size: 1.0625rem;
+        font-weight: 600;
+      }
+      .dl-card > p {
+        margin: 0 0 1.25rem;
+        font-size: 0.875rem;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+      .dl-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
       }
       .btn-secondary {
+        color: var(--ink);
         background: transparent;
-        color: var(--text);
-        border: 1px solid var(--border);
+        border: 1px solid var(--line);
       }
       .btn-secondary:hover {
         background: rgba(15, 23, 42, 0.04);
@@ -143,89 +544,307 @@
           background: rgba(255, 255, 255, 0.06);
         }
       }
-      .stack {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-      }
-      .note {
-        margin-top: 2rem;
-        padding: 1rem 1.25rem;
+      .ios-steps {
+        margin: 1rem 0 0;
+        padding: 0.85rem 1rem;
+        font-size: 0.8125rem;
+        color: var(--muted);
+        background: rgba(15, 23, 42, 0.03);
         border-radius: 0.75rem;
-        background: rgba(5, 150, 105, 0.08);
-        border: 1px solid rgba(5, 150, 105, 0.2);
-        font-size: 0.85rem;
-        color: var(--muted);
+        border: 1px solid var(--line);
       }
-      .note strong {
-        color: var(--text);
+      @media (prefers-color-scheme: dark) {
+        .ios-steps {
+          background: rgba(0, 0, 0, 0.25);
+        }
       }
-      ol.steps {
-        margin: 0.75rem 0 0;
-        padding-left: 1.25rem;
-        font-size: 0.85rem;
-        color: var(--muted);
-      }
-      ol.steps li {
+      .ios-steps strong {
+        color: var(--ink);
+        display: block;
         margin-bottom: 0.35rem;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .ios-steps ol {
+        margin: 0;
+        padding-left: 1.1rem;
+      }
+      .ios-steps li {
+        margin-bottom: 0.25rem;
+      }
+      .privacy {
+        margin-top: 3rem;
+        padding: 1.5rem 1.25rem;
+        max-width: 40rem;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+        font-size: 0.875rem;
+        color: var(--muted);
+        line-height: 1.65;
+        border-top: 1px solid var(--line);
+      }
+      .privacy strong {
+        color: var(--ink);
       }
       footer {
-        margin-top: 3rem;
-        font-size: 0.8rem;
-        color: var(--muted);
+        margin-top: 2.5rem;
+        padding-top: 1.5rem;
+        text-align: center;
+        font-size: 0.8125rem;
+        color: var(--muted2);
+        border-top: 1px solid var(--line);
       }
       footer a {
-        color: var(--accent);
+        color: var(--emerald);
+        font-weight: 500;
+        text-decoration: none;
+      }
+      footer a:hover {
+        text-decoration: underline;
       }
     </style>
   </head>
   <body>
-    <div class="wrap">
-      <header>
-        <p class="badge">Cadence</p>
-        <h1>Budget between paychecks</h1>
-        <p class="lead">
-          Plan bills and cashflow around your pay dates. Your data stays on your device — no bank
-          linking required.
+    <div class="noise" aria-hidden="true"></div>
+    <div class="hero-bg" aria-hidden="true"></div>
+
+    <div class="shell">
+      <nav>
+        <a class="logo" href="#" aria-label="Cadence home">
+          <svg viewBox="0 0 108 108" width="32" height="32" aria-hidden="true">
+            <rect width="108" height="108" rx="22" fill="#0f172a" />
+            <path fill="#14b8a8" d="M26 78V52h14v26H26z" />
+            <path fill="#2dd4bf" d="M47 78V40h14v38H47z" />
+            <path fill="#5eead4" d="M68 78V28h14v50H68z" />
+          </svg>
+          Cadence
+        </a>
+        <a class="nav-cta web-app-target" href="./app/">Open app</a>
+      </nav>
+
+      <header class="hero">
+        <p class="hero-pill">Pay-period budgeting</p>
+        <h1>Your money, timed to real life</h1>
+        <p class="tagline">
+          See what leaves your account between paydays — bills, one-offs, and quick expenses — in
+          one calm view. Built for people who get paid on a schedule, not a calendar month alone.
         </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary web-app-target" href="./app/">Try Cadence in your browser</a>
+          <a class="btn btn-ghost" href="#download">Get the app</a>
+        </div>
+        <div class="trust" aria-label="Trust highlights">
+          <span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            No bank linking
+          </span>
+          <span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0110 0v4" />
+            </svg>
+            Data stays on your device
+          </span>
+          <span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+              <path d="M22 4L12 14.01l-3-3" />
+            </svg>
+            Free &amp; open source
+          </span>
+        </div>
+
+        <div class="mock" aria-hidden="true">
+          <div class="mock-inner">
+            <div class="mock-bar">
+              <div class="mock-dots" aria-hidden="true">
+                <i></i><i></i><i></i>
+              </div>
+              <span style="flex: 1; text-align: center">This pay period</span>
+            </div>
+            <div class="mock-body">
+              <div class="mock-label">Still unpaid</div>
+              <div class="mock-row">
+                <span class="mock-big">$1,248</span>
+              </div>
+              <p class="mock-sub">Fri, Jan 3 → Thu, Jan 16 · next payday</p>
+              <span class="mock-pill">Projected balance · Safe to spend</span>
+            </div>
+          </div>
+        </div>
       </header>
 
-      <div class="grid">
-        <div class="card">
-          <h2>Android</h2>
-          <p>Install the native app (APK). Best experience for notifications and offline use.</p>
-          <div class="stack">
-            <a id="apk-link" class="btn btn-primary" href="#">Download APK (GitHub Releases)</a>
-            <a id="releases-link" class="btn btn-secondary" href="#">All releases</a>
-          </div>
-        </div>
-        <div class="card">
-          <h2>iPhone &amp; iPad</h2>
+      <section aria-labelledby="features-heading">
+        <div class="section-head">
+          <h2 id="features-heading">Everything you need between paychecks</h2>
           <p>
-            Use the web app in Safari, then add it to your Home Screen — it runs like an app (PWA).
+            Cadence isn’t a bank feed — it’s a planning layer. You tell it your pay schedule and
+            what’s coming due; it shows the runway.
           </p>
-          <div class="stack">
-            <a id="web-link" class="btn btn-primary" href="./app/">Open web app</a>
-          </div>
-          <ol class="steps">
-            <li>Open the link above in <strong>Safari</strong>.</li>
-            <li>Tap the <strong>Share</strong> button.</li>
-            <li>Tap <strong>Add to Home Screen</strong>, then Add.</li>
-          </ol>
         </div>
-      </div>
+        <div class="features">
+          <article class="feat">
+            <div class="feat-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <path d="M16 2v4M8 2v4M3 10h18" />
+              </svg>
+            </div>
+            <h3>Calendar &amp; upcoming</h3>
+            <p>
+              Bills and withdrawals on a timeline so you’re not surprised the day before payday.
+            </p>
+          </article>
+          <article class="feat">
+            <div class="feat-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </div>
+            <h3>Cashflow &amp; balance</h3>
+            <p>
+              Optional starting balance plus scheduled items to estimate where your checking balance
+              lands.
+            </p>
+          </article>
+          <article class="feat">
+            <div class="feat-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12V7H5a2 2 0 010-4h14v4" />
+                <path d="M3 5v14a2 2 0 002 2h16v-5" />
+                <path d="M18 12a2 2 0 00-2 2c0 1.1.9 2 2 2h4v-4h-4z" />
+              </svg>
+            </div>
+            <h3>Envelopes &amp; budgets</h3>
+            <p>
+              Category or envelope targets for the current pay window — compare plan vs actual.
+            </p>
+          </article>
+          <article class="feat">
+            <div class="feat-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+              </svg>
+            </div>
+            <h3>Bills &amp; one-offs</h3>
+            <p>
+              Recurring bills with flexible schedules, plus one-time hits so nothing gets lost.
+            </p>
+          </article>
+          <article class="feat">
+            <div class="feat-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 3v18h18" />
+                <path d="M18 17V9M12 17V5M6 17v-3" />
+              </svg>
+            </div>
+            <h3>Debt tool</h3>
+            <p>A dedicated space to model payoff plans alongside the rest of your cashflow.</p>
+          </article>
+          <article class="feat">
+            <div class="feat-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+              </svg>
+            </div>
+            <h3>Export &amp; backup</h3>
+            <p>JSON backup, CSV, and PDF summaries — your data is yours to keep.</p>
+          </article>
+        </div>
+      </section>
 
-      <div class="note">
-        <strong>Privacy.</strong> Cadence does not connect to your bank. Budgets and reminders use
-        data you enter on this device.
-      </div>
+      <section aria-labelledby="steps-heading">
+        <div class="section-head">
+          <h2 id="steps-heading">Up and running in minutes</h2>
+          <p>No credit card, no institution login — just your pay schedule and what you owe.</p>
+        </div>
+        <div class="steps">
+          <div class="step">
+            <h3>Set your pay rhythm</h3>
+            <p>Weekly, biweekly, monthly, or twice a month — match how you actually get paid.</p>
+          </div>
+          <div class="step">
+            <h3>Add bills &amp; spending</h3>
+            <p>Pull in what’s fixed and what’s variable so the summary reflects your real life.</p>
+          </div>
+          <div class="step">
+            <h3>Check off &amp; adjust</h3>
+            <p>Mark items paid, log quick expenses, and tune budgets as the month moves.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="download" id="download" aria-labelledby="dl-heading">
+        <h2 id="dl-heading">Choose your device</h2>
+        <p>
+          Same Cadence everywhere: native Android for the tightest notifications, or the web app on
+          iPhone (install to Home Screen for an app-like experience).
+        </p>
+        <div class="dl-grid">
+          <div class="dl-card">
+            <h3>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5508 0 .9993.4482.9993.9993.0001.5511-.4485.9997-.9993.9997m-11.046 0c-.551 0-.9993-.4486-.9993-.9997s.4483-.9993.9993-.9993c.551 0 .9993.4482.9993.9993 0 .5511-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.5758 12 7.5758s-3.5902.6681-5.1349 1.9319L4.8428 6.0047a.4161.4161 0 00-.5676-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3435-4.1021-2.6892-7.5743-6.1185-10.4396"
+                />
+              </svg>
+              Android
+            </h3>
+            <p>
+              Install the APK for local notifications, quick access from your home screen, and the
+              same UI you get on the web.
+            </p>
+            <div class="dl-stack">
+              <a id="apk-link" class="btn btn-primary" href="#">Download APK (latest)</a>
+              <a id="releases-link" class="btn btn-secondary" href="#">All releases &amp; notes</a>
+            </div>
+          </div>
+          <div class="dl-card">
+            <h3>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
+                />
+              </svg>
+              iPhone &amp; iPad
+            </h3>
+            <p>
+              Open Cadence in Safari, then add it to your Home Screen. It runs full-screen like a
+              native app (PWA).
+            </p>
+            <a id="web-link" class="btn btn-primary web-app-target" href="./app/">Open web app</a>
+            <div class="ios-steps">
+              <strong>Add to Home Screen</strong>
+              <ol>
+                <li>Use <strong>Safari</strong> (required for install).</li>
+                <li>Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</li>
+                <li>Tap <strong>Add</strong> — Cadence opens like an app.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p class="privacy">
+        <strong>Privacy first.</strong>
+        Cadence never sees your bank login. Budgets, bills, and balances are built from what you
+        enter — stored locally on your phone or browser unless you export.
+      </p>
 
       <footer>
-        <p id="repo-line">
-          Repo: <a id="repo-link" href="#">GitHub</a>
+        <p>
+          Open source ·
+          <a id="repo-link" href="#">GitHub</a>
         </p>
       </footer>
     </div>
+
     <script>
       ;(function () {
         var repo = 'GITHUB_REPO_PLACEHOLDER'
@@ -239,8 +858,10 @@
           else if (p.endsWith('/')) base = p.slice(0, -1)
           else base = p.replace(/\/[^/]*$/, '') || ''
         } catch (e) {}
-        var web = document.getElementById('web-link')
-        if (web && base) web.setAttribute('href', base + '/app/')
+        var appHref = base ? base + '/app/' : './app/'
+        document.querySelectorAll('.web-app-target').forEach(function (el) {
+          el.setAttribute('href', appHref)
+        })
         var gh = 'https://github.com/' + repo
         var rel = gh + '/releases/latest'
         var apk = document.getElementById('apk-link')
@@ -253,11 +874,11 @@
         if (repo && releases) releases.setAttribute('href', gh + '/releases')
         if (repo && repoLink) {
           repoLink.setAttribute('href', gh)
-          repoLink.textContent = repo
+          repoLink.textContent = 'View on GitHub'
         }
         if (!repo && apk) {
-          apk.setAttribute('href', './app/')
-          apk.textContent = 'Open web app (same as Android browser)'
+          apk.setAttribute('href', appHref)
+          apk.textContent = 'Use web app'
         }
       })()
     </script>
