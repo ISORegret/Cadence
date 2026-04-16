@@ -1,0 +1,77 @@
+# Builds a debug APK on every push to main and uploads it to a rolling GitHub Release
+# tagged "continuous". Direct download URL (stable filename):
+#   https://github.com/OWNER/REPO/releases/download/continuous/cadence-release.apk
+name: Build APK (main)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            android/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install & build web + sync Capacitor
+        run: |
+          npm ci
+          npm run build
+          npx cap sync android
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Stage APK for release
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk cadence-release.apk
+          ls -la cadence-release.apk
+
+      - name: Upload to rolling "continuous" release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: continuous
+          name: Cadence — latest APK (main)
+          body: |
+            Auto-built from `${{ github.sha }}` on branch `${{ github.ref_name }}`.
+
+            Install: download **cadence-release.apk** and open it on your Android device (you may need to allow installs from unknown sources).
+
+            This is a **debug** build — same output as `npm run build:apk` locally.
+          artifacts: cadence-release.apk
+          allowUpdates: true
+          replacesArtifacts: true
+          token: ${{ secrets.GITHUB_TOKEN }}

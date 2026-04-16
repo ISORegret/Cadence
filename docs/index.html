@@ -863,13 +863,14 @@
           el.setAttribute('href', appHref)
         })
         var gh = 'https://github.com/' + repo
-        var rel = gh + '/releases/latest'
+        // Matches .github/workflows/build-apk-release.yml → release tag "continuous", asset cadence-release.apk
+        var apkDirect = gh + '/releases/download/continuous/cadence-release.apk'
         var apk = document.getElementById('apk-link')
         var releases = document.getElementById('releases-link')
         var repoLink = document.getElementById('repo-link')
         if (repo && apk) {
-          apk.setAttribute('href', rel)
-          apk.textContent = 'Download APK (latest release)'
+          apk.setAttribute('href', apkDirect)
+          apk.textContent = 'Download APK'
         }
         if (repo && releases) releases.setAttribute('href', gh + '/releases')
         if (repo && repoLink) {
