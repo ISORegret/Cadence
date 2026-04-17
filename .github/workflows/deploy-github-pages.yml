@@ -45,6 +45,12 @@ jobs:
           cp public/favicon.svg _site/favicon.svg
           cp -r dist/. _site/app/
           cp _site/app/index.html _site/app/404.html
+          if [ -f release/cadence-release.apk ]; then
+            cp release/cadence-release.apk _site/cadence-release.apk
+            ls -la _site/cadence-release.apk
+          else
+            echo "::warning::release/cadence-release.apk missing — APK link on the landing page will 404 until you commit it (npm run build:apk)."
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
