@@ -1,18 +1,22 @@
-# Builds a debug APK on every push to main and uploads it to a rolling GitHub Release
-# tagged "continuous". Direct download URL (stable filename):
+# Publishes the APK committed at release/cadence-release.apk to a rolling GitHub Release.
+# Build locally: npm run build:apk  →  copies Gradle output to release/cadence-release.apk
+# Direct download URL (stable filename):
 #   https://github.com/OWNER/REPO/releases/download/continuous/cadence-release.apk
-name: Build APK (main)
+name: Publish APK (main)
 
 on:
   push:
     branches: [main, master]
+    paths:
+      - 'release/cadence-release.apk'
+      - '.github/workflows/build-apk-release.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: build-apk-${{ github.ref }}
+  group: publish-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -21,44 +25,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            android/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Install & build web + sync Capacitor
+      - name: Verify committed APK exists
         run: |
-          npm ci
-          npm run build
-          npx cap sync android
-
-      - name: Assemble debug APK
-        working-directory: android
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon --stacktrace
-
-      - name: Stage APK for release
-        run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk cadence-release.apk
-          ls -la cadence-release.apk
+          test -f release/cadence-release.apk || (
+            echo "::error::Missing release/cadence-release.apk. Run npm run build:apk locally, then commit and push release/cadence-release.apk"
+            exit 1
+          )
+          ls -la release/cadence-release.apk
 
       - name: Upload to rolling "continuous" release
         uses: ncipollo/release-action@v1
@@ -66,12 +39,12 @@ jobs:
           tag: continuous
           name: Cadence — latest APK (main)
           body: |
-            Auto-built from `${{ github.sha }}` on branch `${{ github.ref_name }}`.
+            APK committed in this repo at `release/cadence-release.apk` (from `${{ github.sha }}`).
 
             Install: download **cadence-release.apk** and open it on your Android device (you may need to allow installs from unknown sources).
 
-            This is a **debug** build — same output as `npm run build:apk` locally.
-          artifacts: cadence-release.apk
+            This is a **debug** build — same output as `npm run build:apk` locally (`assembleDebug`).
+          artifacts: release/cadence-release.apk
           allowUpdates: true
           replacesArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}

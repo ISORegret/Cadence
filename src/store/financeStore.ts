@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { ParsedBackup } from '../lib/backup'
+import { sanitizePaySettings } from '../lib/sanitizePaySettings'
 import type {
   AppPreferences,
   Bill,
@@ -186,12 +187,14 @@ export const useFinanceStore = create<FinanceState>()(
 
       setPaySettings: (paySettings) =>
         set((state) => ({
-          ...withUndo(state, { paySettings }),
+          ...withUndo(state, {
+            paySettings: sanitizePaySettings(paySettings)!,
+          }),
         })),
 
       replaceFromBackup: (payload) =>
         set({
-          paySettings: payload.paySettings,
+          paySettings: sanitizePaySettings(payload.paySettings),
           bills: payload.bills,
           envelopes: payload.envelopes ?? [],
           oneOffItems: payload.oneOffItems ?? [],
@@ -544,13 +547,17 @@ export const useFinanceStore = create<FinanceState>()(
         const p = (persisted ?? {}) as Partial<FinanceState>
         const prevPrefs = p.preferences
         if (!prevPrefs) {
-          return { ...current, ...p } as FinanceState
+          const merged = { ...current, ...p } as FinanceState
+          return {
+            ...merged,
+            paySettings: sanitizePaySettings(merged.paySettings),
+          }
         }
         const welcomeDismissedAt =
           'welcomeDismissedAt' in prevPrefs
             ? prevPrefs.welcomeDismissedAt
             : new Date().toISOString()
-        return {
+        const merged = {
           ...current,
           ...p,
           preferences: {
@@ -562,6 +569,10 @@ export const useFinanceStore = create<FinanceState>()(
               : [],
           },
         } as FinanceState
+        return {
+          ...merged,
+          paySettings: sanitizePaySettings(merged.paySettings),
+        }
       },
       partialize: (state) => ({
         paySettings: state.paySettings,
