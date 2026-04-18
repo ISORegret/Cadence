@@ -12,6 +12,7 @@ import { CashflowStandingBadge } from './CashflowStandingBadge'
 import { HydrationRibbon } from './HydrationRibbon'
 import { KeyboardShortcuts } from './KeyboardShortcuts'
 import { ScrollRestoration } from './ScrollRestoration'
+import { PwaUpdateBanner } from './PwaUpdateBanner'
 import type { ThemePreference } from '../types'
 
 /** Monarch-style: filled pill on small screens; sidebar uses subtle tint on lg+ */
@@ -360,6 +361,7 @@ export function Layout() {
       <HydrationRibbon />
       <KeyboardShortcuts />
       <ScrollRestoration />
+      <PwaUpdateBanner />
 
       {/* Monarch-style desktop sidebar */}
       <aside className="relative z-50 hidden w-56 shrink-0 flex-col border-r border-slate-200/90 bg-white pt-[max(0.75rem,env(safe-area-inset-top))] dark:border-white/[0.08] dark:bg-zinc-900 lg:flex">

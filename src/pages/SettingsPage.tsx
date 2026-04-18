@@ -10,6 +10,7 @@ import {
 } from '../lib/backup'
 import { buildFinanceCsv, downloadCsv } from '../lib/csvExport'
 import { PageUndo } from '../components/PageUndo'
+import { APP_VERSION, BUILD_TIME_ISO } from '../lib/appMeta'
 import type { CadenceNotificationPermissionUi } from '../lib/localNotifs'
 import {
   getCadenceNotificationPermissionUi,
@@ -1351,6 +1352,14 @@ export function SettingsPage() {
           {bills.length} bill{bills.length === 1 ? '' : 's'} — export often.
         </p>
       </div>
+
+      <p className="text-center text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
+        Web app v{APP_VERSION} · Built{' '}
+        {new Date(BUILD_TIME_ISO).toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        })}
+      </p>
     </div>
   )
 }
