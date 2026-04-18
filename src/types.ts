@@ -15,6 +15,22 @@ export interface PaySettings {
   startingFundsAmount?: number | null
   currencyCode?: string
   locale?: string
+  /**
+   * Savings balance at end of this day — optional baseline for the savings projection.
+   * Pair with transfers dated after this day.
+   */
+  savingsBalanceDate?: string | null
+  savingsBalanceAmount?: number | null
+}
+
+/** Checking ↔ savings moves; affects projected checking like cash leaving/returning. */
+export interface SavingsAccountTransfer {
+  id: string
+  date: string
+  /** Positive amount always. */
+  amount: number
+  direction: 'to_savings' | 'from_savings'
+  note?: string
 }
 
 export type BillSchedule =
@@ -44,10 +60,6 @@ export interface Bill {
   envelopeId?: string
   /** When set, UI can show this amount as an estimate rather than fixed. */
   confidence?: 'estimate' | 'confirmed'
-  /**
-   * When true, show “set aside per pay period” on Bills and Upcoming for this bill only.
-   */
-  trackSetAside?: boolean
 }
 
 export interface OneOffItem {
@@ -109,7 +121,7 @@ export interface EnvelopeTransfer {
   note?: string
 }
 
-/** Free-form note for a specific pay window (matched by period dates). */
+/** Free-form note for a specific pay period (matched by period dates). */
 export interface PeriodNote {
   id: string
   periodStart: string
@@ -126,7 +138,7 @@ export interface QuickExpenseTemplate {
   envelopeId?: string
 }
 
-export type OutflowSource = 'bill' | 'oneoff' | 'expense'
+export type OutflowSource = 'bill' | 'oneoff' | 'expense' | 'savings_transfer'
 
 export interface Outflow {
   billId: string
@@ -190,4 +202,13 @@ export interface AppPreferences {
    * `detailed` — original full Summary layout.
    */
   summaryDensity?: 'simple' | 'detailed'
+  /** Summary withdrawal filters (persisted). Empty string = all. */
+  summaryCategoryFilter?: string
+  summaryEnvelopeFilter?: string
+  summaryWithdrawalSearch?: string
+  /** Last-used quick expense picks */
+  lastQuickExpenseCategory?: string
+  lastQuickExpenseEnvelopeId?: string
+  /** CSV export: full backup-style vs slimmer spreadsheet */
+  csvExportPreset?: 'full' | 'minimal'
 }

@@ -12,12 +12,15 @@ import type {
   CalendarReminder,
   PeriodNote,
   QuickExpenseTemplate,
+  SavingsAccountTransfer,
   SavingsGoal,
 } from '../types'
 import { Capacitor } from '@capacitor/core'
 import { downloadBlob, exportJsonBackupNative } from './downloadBlob'
 
-export const BACKUP_VERSION = 4 as const
+export const BACKUP_VERSION = 6 as const
+export const BACKUP_VERSION_V5 = 5 as const
+export const BACKUP_VERSION_V4 = 4 as const
 export const BACKUP_VERSION_V3 = 3 as const
 export const BACKUP_VERSION_LEGACY = 1 as const
 export const BACKUP_VERSION_V2 = 2 as const
@@ -38,6 +41,7 @@ export interface BackupPayload {
   envelopeTransfers: EnvelopeTransfer[]
   periodNotes: PeriodNote[]
   quickExpenseTemplates: QuickExpenseTemplate[]
+  savingsAccountTransfers: SavingsAccountTransfer[]
 }
 
 export interface ParsedBackup {
@@ -54,6 +58,7 @@ export interface ParsedBackup {
   envelopeTransfers: EnvelopeTransfer[]
   periodNotes: PeriodNote[]
   quickExpenseTemplates: QuickExpenseTemplate[]
+  savingsAccountTransfers: SavingsAccountTransfer[]
 }
 
 function defaultPrefs(): AppPreferences {
@@ -144,9 +149,6 @@ function isBill(x: unknown): x is Bill {
   ) {
     return false
   }
-  if (b.trackSetAside !== undefined && typeof b.trackSetAside !== 'boolean') {
-    return false
-  }
   return true
 }
 
@@ -218,6 +220,33 @@ function isPaySettings(x: unknown): x is PaySettings {
   ) {
     return false
   }
+  if (
+    p.savingsBalanceDate !== undefined &&
+    p.savingsBalanceDate !== null &&
+    typeof p.savingsBalanceDate !== 'string'
+  ) {
+    return false
+  }
+  if (
+    p.savingsBalanceAmount !== undefined &&
+    p.savingsBalanceAmount !== null &&
+    (typeof p.savingsBalanceAmount !== 'number' ||
+      Number.isNaN(p.savingsBalanceAmount))
+  ) {
+    return false
+  }
+  return true
+}
+
+function isSavingsAccountTransfer(x: unknown): x is SavingsAccountTransfer {
+  if (!x || typeof x !== 'object') return false
+  const t = x as Record<string, unknown>
+  if (typeof t.id !== 'string') return false
+  if (typeof t.date !== 'string') return false
+  if (typeof t.amount !== 'number' || Number.isNaN(t.amount) || t.amount <= 0)
+    return false
+  if (t.direction !== 'to_savings' && t.direction !== 'from_savings') return false
+  if (t.note !== undefined && typeof t.note !== 'string') return false
   return true
 }
 
@@ -468,6 +497,7 @@ export function parseBackupJson(text: string): ParsedBackup | null {
       envelopeTransfers: [],
       periodNotes: [],
       quickExpenseTemplates: [],
+      savingsAccountTransfers: [],
     }
   }
 
@@ -500,10 +530,16 @@ export function parseBackupJson(text: string): ParsedBackup | null {
       envelopeTransfers: [],
       periodNotes: [],
       quickExpenseTemplates: [],
+      savingsAccountTransfers: [],
     }
   }
 
-  if (ver === BACKUP_VERSION_V3 || ver === BACKUP_VERSION) {
+  if (
+    ver === BACKUP_VERSION_V3 ||
+    ver === BACKUP_VERSION_V4 ||
+    ver === BACKUP_VERSION_V5 ||
+    ver === BACKUP_VERSION
+  ) {
     if (!Array.isArray(o.envelopes) || !o.envelopes.every(isEnvelope)) {
       return null
     }
@@ -538,7 +574,11 @@ export function parseBackupJson(text: string): ParsedBackup | null {
 
     let periodNotes: PeriodNote[]
     let quickExpenseTemplates: QuickExpenseTemplate[]
-    if (ver === BACKUP_VERSION) {
+    if (
+      ver === BACKUP_VERSION_V4 ||
+      ver === BACKUP_VERSION_V5 ||
+      ver === BACKUP_VERSION
+    ) {
       if (!Array.isArray(o.periodNotes) || !o.periodNotes.every(isPeriodNote)) {
         return null
       }
@@ -562,6 +602,12 @@ export function parseBackupJson(text: string): ParsedBackup | null {
           : []
     }
 
+    const savingsAccountTransfers =
+      Array.isArray(o.savingsAccountTransfers) &&
+      o.savingsAccountTransfers.every(isSavingsAccountTransfer)
+        ? (o.savingsAccountTransfers as SavingsAccountTransfer[])
+        : []
+
     return {
       paySettings: o.paySettings as PaySettings | null,
       bills: o.bills as Bill[],
@@ -576,6 +622,7 @@ export function parseBackupJson(text: string): ParsedBackup | null {
       envelopeTransfers: o.envelopeTransfers as EnvelopeTransfer[],
       periodNotes,
       quickExpenseTemplates,
+      savingsAccountTransfers,
     }
   }
 

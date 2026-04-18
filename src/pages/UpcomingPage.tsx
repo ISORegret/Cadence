@@ -6,6 +6,7 @@ import { formatMoney } from '../lib/money'
 import {
   estimatedTakeHomeInRange,
   getPayPeriodAtOffset,
+  payPeriodInclusiveLastDay,
   groupOutflowsByDate,
   listExpenseOutflowsInRange,
   listOneOffOutflowsInRange,
@@ -16,8 +17,10 @@ import {
   toISODate,
   totalAmount,
 } from '../lib/payPeriod'
-import { projectedBalanceEndOfDay } from '../lib/cashProjection'
-import { computeBillSetAside } from '../lib/setAside'
+import {
+  projectedBalanceEndOfDay,
+  projectedFlowTotalsInclusiveRange,
+} from '../lib/cashProjection'
 import { getStartingFunds, hasStartingFunds } from '../lib/startingFunds'
 import type { Bill, ExpenseEntry, OneOffItem } from '../types'
 import { PageUndo } from '../components/PageUndo'
@@ -43,6 +46,7 @@ export function UpcomingPage() {
   const oneOffItems = useFinanceStore((s) => s.oneOffItems)
   const expenseEntries = useFinanceStore((s) => s.expenseEntries)
   const incomeLines = useFinanceStore((s) => s.incomeLines)
+  const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
   const preferences = useFinanceStore((s) => s.preferences)
 
   const [periodOffset, setPeriodOffset] = useState(0)
@@ -64,7 +68,8 @@ export function UpcomingPage() {
 
   const labelRange = useMemo(() => {
     if (!period) return ''
-    return `${format(period.lastPayday, 'EEE, MMM d')} → ${format(period.nextPayday, 'EEE, MMM d')}`
+    const through = payPeriodInclusiveLastDay(period)
+    return `${format(period.intervalStart, 'EEE, MMM d')} → ${format(through, 'EEE, MMM d')} · next payday ${format(period.nextPayday, 'EEE, MMM d')}`
   }, [period])
 
   const outflows = useMemo(() => {
@@ -133,6 +138,7 @@ export function UpcomingPage() {
       oneOffItems,
       expenseEntries,
       incomeLines,
+      savingsAccountTransfers,
     )
     return { kind: 'ok' as const, balance }
   }, [
@@ -145,6 +151,7 @@ export function UpcomingPage() {
     oneOffItems,
     expenseEntries,
     incomeLines,
+    savingsAccountTransfers,
   ])
 
   const projectedStartOfPeriod = useMemo(() => {
@@ -170,6 +177,7 @@ export function UpcomingPage() {
       oneOffItems,
       expenseEntries,
       incomeLines,
+      savingsAccountTransfers,
     )
     return { balance, dayBeforeIso: dayBeforePeriodStartIso }
   }, [
@@ -182,7 +190,16 @@ export function UpcomingPage() {
     oneOffItems,
     expenseEntries,
     incomeLines,
+    savingsAccountTransfers,
   ])
+
+  /** Deposits − all scheduled lines + balance at end of day before this period (Settings path). */
+  const scheduledNetWithStartBalance = useMemo(() => {
+    if (!projectedStartOfPeriod) return null
+    return (
+      projectedStartOfPeriod.balance + periodIncome - periodTotal
+    )
+  }, [projectedStartOfPeriod, periodIncome, periodTotal])
 
   const projectedPeriodChange = useMemo(() => {
     if (!paySettings || projectedEndOfPeriod?.kind !== 'ok') return null
@@ -201,6 +218,7 @@ export function UpcomingPage() {
       oneOffItems,
       expenseEntries,
       incomeLines,
+      savingsAccountTransfers,
     )
     return projectedEndOfPeriod.balance - balanceEndOfAnchorDay
   }, [
@@ -214,6 +232,52 @@ export function UpcomingPage() {
     oneOffItems,
     expenseEntries,
     incomeLines,
+    savingsAccountTransfers,
+  ])
+
+  /** Same calendar days that drive **Change this period** (matches projection walk). */
+  const projectedChangeFlowBreakdownRange = useMemo(() => {
+    if (!period || !periodLastDayIso || anchorDateSaved == null || !paySettings) {
+      return null
+    }
+    const ps = toISODate(period.intervalStart)
+    const pe = periodLastDayIso
+    if (projectedStartOfPeriod) {
+      return { start: ps, end: pe }
+    }
+    const dayAfterAnchor = toISODate(addDays(parseISO(anchorDateSaved), 1))
+    if (dayAfterAnchor > pe) return null
+    const start = dayAfterAnchor > ps ? dayAfterAnchor : ps
+    return { start, end: pe }
+  }, [
+    period,
+    periodLastDayIso,
+    anchorDateSaved,
+    projectedStartOfPeriod,
+    paySettings,
+  ])
+
+  const projectedChangeFlowBreakdown = useMemo(() => {
+    if (!paySettings || !projectedChangeFlowBreakdownRange) return null
+    const { start, end } = projectedChangeFlowBreakdownRange
+    return projectedFlowTotalsInclusiveRange(
+      start,
+      end,
+      paySettings,
+      bills,
+      oneOffItems,
+      expenseEntries,
+      incomeLines,
+      savingsAccountTransfers,
+    )
+  }, [
+    paySettings,
+    projectedChangeFlowBreakdownRange,
+    bills,
+    oneOffItems,
+    expenseEntries,
+    incomeLines,
+    savingsAccountTransfers,
   ])
 
   const calendarDays = useMemo(() => {
@@ -223,18 +287,6 @@ export function UpcomingPage() {
       end: addDays(period.intervalEndExclusive, -1),
     })
   }, [period])
-
-  const billSetAsideRows = useMemo(() => {
-    if (!paySettings) return []
-    const out: { bill: Bill; dueIso: string; perPayPeriod: number }[] = []
-    for (const bill of bills) {
-      if (bill.trackSetAside !== true) continue
-      const sa = computeBillSetAside(bill, paySettings)
-      if (sa.kind !== 'ok') continue
-      out.push({ bill, dueIso: sa.dueIso, perPayPeriod: sa.perPayPeriod })
-    }
-    return out
-  }, [bills, paySettings])
 
   const money = (n: number) => formatMoney(n, paySettings)
   const netClass = (n: number) =>
@@ -249,8 +301,8 @@ export function UpcomingPage() {
           Set your pay schedule first
         </h2>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          Upcoming shows each pay period from deposit to deposit, with bills and expenses in
-          that window.
+          Upcoming shows each pay period from payday through the day before your next payday,
+          with bills and expenses in that pay period.
         </p>
         <div className="mt-6">
           <Link to="/settings" className="btn-primary">
@@ -270,7 +322,7 @@ export function UpcomingPage() {
             {labelRange}
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Same pay window as Summary: last deposit through the day before your next deposit.
+            Same pay period as Summary: last deposit through the day before your next deposit.
             Bills, one-offs, and expense log entries are grouped by day.
           </p>
         </div>
@@ -278,21 +330,21 @@ export function UpcomingPage() {
           <button
             type="button"
             onClick={() => setPeriodOffset((w) => w - 1)}
-            className="btn-secondary min-h-11 !px-2 !py-2.5 text-sm sm:!px-3"
+            className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
           >
             Prev
           </button>
           <button
             type="button"
             onClick={() => setPeriodOffset(0)}
-            className="btn-secondary min-h-11 !px-2 !py-2.5 text-sm sm:!px-3"
+            className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
           >
             This period
           </button>
           <button
             type="button"
             onClick={() => setPeriodOffset((w) => w + 1)}
-            className="btn-secondary min-h-11 !px-2 !py-2.5 text-sm sm:!px-3"
+            className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
           >
             Next
           </button>
@@ -311,19 +363,8 @@ export function UpcomingPage() {
 
       <div className="card">
         <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-          This pay period at a glance
+          This pay period
         </h3>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-          <span className="font-medium text-slate-800 dark:text-slate-200">Scheduled</span> is
-          simple math: deposits and bills dated in this period only. It does{' '}
-          <span className="font-medium">not</span> know how much money you already had in the bank.
-          <span className="mt-1 block">
-            <span className="font-medium text-slate-800 dark:text-slate-200">Projected balance</span>{' '}
-            uses the balance you set in Settings and moves it forward day by day with the same
-            bills and paychecks, so{' '}
-            <span className="font-medium">start + change = end</span> (your “real” story in the app).
-          </span>
-        </p>
         {periodOffset !== 0 ? (
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             You’re viewing a different pay period than “today.” Everything below is for the dates
@@ -332,7 +373,7 @@ export function UpcomingPage() {
         ) : null}
         {takeHome === null && periodTotal > 0 ? (
           <p className="mt-2 rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-xs leading-snug text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/35 dark:text-amber-100">
-            No paycheck dates fell in this pay window for your schedule, so income shows $0
+            No paycheck dates fell in this pay period for your schedule, so income shows $0
             while bills may still appear. Check your anchor pay date in{' '}
             <Link to="/settings" className="font-semibold underline">
               Settings
@@ -341,55 +382,20 @@ export function UpcomingPage() {
           </p>
         ) : null}
 
-        <div className="mt-5 space-y-5">
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Scheduled this period
-            </h4>
-            <p className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-              Ignores money you had before this period — same as deposits minus bills on the
-              calendar.
-            </p>
-            <dl className="mt-2 grid gap-3 text-sm sm:grid-cols-2">
-              <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50">
-                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Estimated deposits
-                </dt>
-                <dd className="mt-1 tabular-nums text-base font-semibold text-slate-900 dark:text-slate-50">
-                  {money(periodIncome)}
-                </dd>
-              </div>
-              <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50">
-                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Scheduled bills &amp; expenses
-                </dt>
-                <dd className="mt-1 tabular-nums text-base font-semibold text-slate-900 dark:text-slate-50">
-                  {money(periodTotal)}
-                </dd>
-              </div>
-              <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50 sm:col-span-2">
-                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Scheduled surplus (deposits − bills)
-                </dt>
-                <dd className={`mt-1 tabular-nums text-base font-semibold ${netClass(periodNet)}`}>
-                  {money(periodNet)}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
+        <div className="mt-6 space-y-6">
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
-              Projected balance (Settings)
+              Projected checking balance
             </h4>
-            <p className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-              Starts from your starting balance, then applies this period’s paychecks and bills on
-              each day. Read left to right: start → change → end.
+            <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+              Uses the balance from Settings and walks forward day by day: take-home deposits minus
+              bills, one-offs, and expense log on their dates (same amounts as Scheduled outflows
+              below).
             </p>
-            <dl className="mt-2 grid gap-3 text-sm sm:grid-cols-3">
+            <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
               <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50">
                 <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  At start of period
+                  Balance entering pay period
                 </dt>
                 <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">
                   {projectedStartOfPeriod ? (
@@ -422,7 +428,7 @@ export function UpcomingPage() {
               </div>
               <div className="rounded-lg border border-emerald-200/90 bg-emerald-50/80 px-3 py-2.5 dark:border-emerald-800/50 dark:bg-emerald-950/35">
                 <dt className="text-xs font-medium text-emerald-900 dark:text-emerald-200">
-                  Change this period
+                  Pay period net (+ or −)
                 </dt>
                 <dd className="mt-1 text-slate-800 dark:text-slate-100">
                   {projectedPeriodChange !== null ? (
@@ -439,6 +445,67 @@ export function UpcomingPage() {
                             ? `From anchor ${format(parseISO(anchorDateSaved), 'MMM d')} through ${format(parseISO(periodLastDayIso), 'MMM d')}.`
                             : null}
                       </p>
+                      <p className="mt-2 text-[10px] leading-snug text-slate-500 dark:text-slate-500">
+                        Equals <span className="font-medium text-slate-600 dark:text-slate-400">end
+                        balance − start balance</span> for this pay period. Expand{' '}
+                        <span className="font-medium">Calendar check</span> below for deposits minus
+                        scheduled lines.
+                      </p>
+                      {projectedPeriodChange !== null && projectedChangeFlowBreakdown ? (
+                        <div className="mt-3 rounded-lg border border-emerald-200/80 bg-white/90 px-2.5 py-2 text-[11px] leading-snug text-slate-700 dark:border-emerald-900/40 dark:bg-zinc-900/60 dark:text-slate-200">
+                          <p className="font-semibold text-emerald-950 dark:text-emerald-100">
+                            What makes up this change
+                          </p>
+                          <ul className="mt-1.5 grid gap-1 tabular-nums">
+                            <li className="flex justify-between gap-3">
+                              <span>Paychecks &amp; income lines</span>
+                              <span className="text-emerald-800 dark:text-emerald-300">
+                                +{money(projectedChangeFlowBreakdown.income)}
+                              </span>
+                            </li>
+                            <li className="flex justify-between gap-3">
+                              <span>Bills, one-offs &amp; expenses</span>
+                              <span className="text-rose-800/90 dark:text-rose-300/90">
+                                −{money(projectedChangeFlowBreakdown.checkingScheduledOut)}
+                              </span>
+                            </li>
+                            {projectedChangeFlowBreakdown.toSavings > 0 ? (
+                              <li className="flex justify-between gap-3">
+                                <span>To savings</span>
+                                <span className="text-rose-800/90 dark:text-rose-300/90">
+                                  −{money(projectedChangeFlowBreakdown.toSavings)}
+                                </span>
+                              </li>
+                            ) : null}
+                            {projectedChangeFlowBreakdown.fromSavings > 0 ? (
+                              <li className="flex justify-between gap-3">
+                                <span>From savings</span>
+                                <span className="text-emerald-800 dark:text-emerald-300">
+                                  +{money(projectedChangeFlowBreakdown.fromSavings)}
+                                </span>
+                              </li>
+                            ) : null}
+                            <li className="mt-1 flex justify-between gap-3 border-t border-emerald-200/70 pt-1 font-medium text-slate-900 dark:text-slate-100 dark:border-emerald-800/50">
+                              <span>Net (income − out − to savings + from savings)</span>
+                              <span
+                                className={netClass(
+                                  projectedChangeFlowBreakdown.income -
+                                    projectedChangeFlowBreakdown.checkingScheduledOut -
+                                    projectedChangeFlowBreakdown.toSavings +
+                                    projectedChangeFlowBreakdown.fromSavings,
+                                )}
+                              >
+                                {money(
+                                  projectedChangeFlowBreakdown.income -
+                                    projectedChangeFlowBreakdown.checkingScheduledOut -
+                                    projectedChangeFlowBreakdown.toSavings +
+                                    projectedChangeFlowBreakdown.fromSavings,
+                                )}
+                              </span>
+                            </li>
+                          </ul>
+                        </div>
+                      ) : null}
                     </>
                   ) : projectedEndOfPeriod?.kind === 'anchor_after_period' ? (
                     <span className="text-xs text-slate-600 dark:text-slate-400">—</span>
@@ -453,17 +520,33 @@ export function UpcomingPage() {
                   )}
                 </dd>
               </div>
-              <div className="rounded-lg border border-violet-200/90 bg-violet-50/90 px-3 py-2.5 dark:border-violet-800/50 dark:bg-violet-950/40">
-                <dt className="text-xs font-medium text-violet-900 dark:text-violet-200">
-                  At end of period ({format(parseISO(periodLastDayIso), 'MMM d')})
+              <div className="rounded-lg border border-emerald-200/90 bg-emerald-50/80 px-3 py-2.5 dark:border-emerald-800/50 dark:bg-emerald-950/35">
+                <dt className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Balance end of pay period
                 </dt>
                 <dd className="mt-1">
                   {projectedEndOfPeriod?.kind === 'ok' ? (
-                    <span
-                      className={`tabular-nums text-lg font-bold ${netClass(projectedEndOfPeriod.balance)}`}
-                    >
-                      {money(projectedEndOfPeriod.balance)}
-                    </span>
+                    <>
+                      <span
+                        className={`tabular-nums text-lg font-bold ${
+                          projectedEndOfPeriod.balance >= 0
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                      >
+                        {money(projectedEndOfPeriod.balance)}
+                      </span>
+                      {period ? (
+                        <p className="mt-1.5 text-[10px] leading-snug text-slate-600 dark:text-slate-400">
+                          End of{' '}
+                          {format(
+                            payPeriodInclusiveLastDay(period),
+                            'EEEE, MMMM d, yyyy',
+                          )}
+                          . Next payday: {format(period.nextPayday, 'EEEE, MMMM d, yyyy')}.
+                        </p>
+                      ) : null}
+                    </>
                   ) : projectedEndOfPeriod?.kind === 'anchor_after_period' ? (
                     <span className="text-xs text-slate-600 dark:text-slate-400">
                       Anchor is after this period — try a later period or an earlier anchor.
@@ -481,43 +564,97 @@ export function UpcomingPage() {
               </div>
             </dl>
           </div>
-        </div>
 
-        {billSetAsideRows.length > 0 ? (
-          <div className="mt-6 rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-4 dark:border-emerald-800/40 dark:bg-emerald-950/25">
-            <h3 className="text-sm font-semibold text-emerald-950 dark:text-emerald-100">
-              Set aside toward bills (rough guide)
-            </h3>
-            <p className="mt-1 text-xs leading-snug text-emerald-900/90 dark:text-emerald-200/90">
-              Bills you marked “Track set-aside” on the Bills page. Split across pay periods until
-              the due date — not a bank balance; use projected balances above for that.
-            </p>
-            <ul className="mt-3 space-y-2 text-sm">
-              {billSetAsideRows.map(({ bill, dueIso, perPayPeriod }) => (
-                <li
-                  key={bill.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/50 pb-2 last:border-0 dark:border-emerald-800/30"
-                >
-                  <span className="font-medium text-slate-900 dark:text-slate-100">
-                    {bill.name}
-                    {bill.confidence === 'estimate' ? (
-                      <span className="ml-1.5 text-[10px] font-semibold uppercase text-amber-800 dark:text-amber-300">
-                        Est.
+          <details className="rounded-lg border border-slate-200/90 bg-slate-50/40 dark:border-white/10 dark:bg-zinc-900/30">
+            <summary className="cursor-pointer select-none px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 marker:text-slate-500">
+              Calendar check
+            </summary>
+            <div className="border-t border-slate-200/80 px-3 pb-3 pt-2 dark:border-white/10">
+              <p className="text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                Same dated amounts as projected checking above. May differ from{' '}
+                <span className="font-medium text-slate-600 dark:text-slate-300">
+                  Pay period net (+ or −)
+                </span>{' '}
+                when deposits and paydays don&apos;t align.
+              </p>
+              <div className="mt-3 space-y-3 text-sm">
+                <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white/90 dark:border-white/10 dark:bg-zinc-900/45">
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 gap-y-1 px-3 pt-3 pb-2 sm:gap-x-3 sm:px-4 sm:pt-4">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Deposits
+                      </p>
+                      <p className="mt-0.5 tabular-nums text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+                        {money(periodIncome)}
+                      </p>
+                    </div>
+                    <span
+                      className="select-none pb-1 text-lg font-light text-slate-300 dark:text-slate-600 sm:text-xl"
+                      aria-hidden
+                    >
+                      −
+                    </span>
+                    <div className="min-w-0 text-right">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Bills &amp; expenses
+                      </p>
+                      <p className="mt-0.5 tabular-nums text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+                        {money(periodTotal)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-slate-200/85 bg-slate-50/70 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-950/55 sm:px-4">
+                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                      Net from schedule{' '}
+                      <span className="font-normal text-slate-500 dark:text-slate-500">
+                        (no bank balance)
                       </span>
-                    ) : null}
-                  </span>
-                  <span className="shrink-0 tabular-nums text-emerald-800 dark:text-emerald-200">
-                    {money(perPayPeriod)} / pay period → due {format(parseISO(dueIso), 'MMM d')}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+                    </p>
+                    <p className={`tabular-nums text-lg font-semibold tracking-tight ${netClass(periodNet)}`}>
+                      {money(periodNet)}
+                    </p>
+                  </div>
+                </div>
+                {projectedStartOfPeriod && scheduledNetWithStartBalance !== null ? (
+                  <div className="rounded-xl border border-violet-200/90 bg-violet-50/90 px-3 py-3 dark:border-violet-800/50 dark:bg-violet-950/35">
+                    <p className="text-xs font-medium text-violet-900 dark:text-violet-200">
+                      With balance at start of pay period
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1 text-sm tabular-nums">
+                      <span className="font-semibold text-slate-900 dark:text-slate-50">
+                        {money(projectedStartOfPeriod.balance)}
+                      </span>
+                      <span className="text-slate-400 dark:text-slate-500" aria-hidden>
+                        {periodNet >= 0 ? '+' : '−'}
+                      </span>
+                      <span className={`font-semibold ${netClass(periodNet)}`}>
+                        {money(Math.abs(periodNet))}
+                      </span>
+                      <span className="text-slate-400 dark:text-slate-500" aria-hidden>
+                        =
+                      </span>
+                      <span
+                        className={`text-lg font-bold ${netClass(scheduledNetWithStartBalance)}`}
+                      >
+                        {money(scheduledNetWithStartBalance)}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-center text-[10px] leading-snug text-violet-800/85 dark:text-violet-300/80">
+                      Rough sanity check vs projected checking.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </details>
+        </div>
 
         <h3 className="mt-6 text-base font-semibold text-slate-900 dark:text-slate-50">
           Scheduled outflows
         </h3>
+        <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+          Every dated line in this pay period — same amounts as the projected checking walk above.
+        </p>
         {outflows.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
             Nothing scheduled this period. Add or edit bills on the{' '}
@@ -536,7 +673,7 @@ export function UpcomingPage() {
               return (
                 <div key={iso}>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {format(d, 'EEEE, MMM d')} · {money(daySum)}
+                    {format(d, 'EEEE, MMM d')} · {money(daySum)} scheduled
                   </p>
                   <ul className="mt-2 space-y-2">
                     {dayFlows.map((o) => (

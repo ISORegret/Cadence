@@ -15,6 +15,7 @@ import type {
   PeriodBudgetRow,
   PeriodNote,
   QuickExpenseTemplate,
+  SavingsAccountTransfer,
   SavingsGoal,
 } from '../types'
 
@@ -35,9 +36,32 @@ export const defaultPreferences = (): AppPreferences => ({
   safeSpendBufferAmount: null,
   summaryViewMode: 'pay_period',
   summaryDensity: 'simple',
+  csvExportPreset: 'full',
 })
 
 const MAX_UNDO = 12
+
+/** Strip removed set-aside preference keys from older localStorage saves. */
+function sanitizePreferences(prefs: AppPreferences): AppPreferences {
+  const next = { ...prefs }
+  for (const k of [
+    'setAsideJarPaidThrough',
+    'setAsideJarProjectionReleaseThrough',
+    'setAsideJarPaidBillHideThrough',
+    'setAsideJarPaidBillTapMs',
+    'setAsideJarProjectionReleaseTapMs',
+  ] as const) {
+    delete (next as Record<string, unknown>)[k]
+  }
+  return next
+}
+
+function sanitizeBill(b: Bill): Bill {
+  const x = { ...b } as Record<string, unknown>
+  delete x.trackSetAside
+  delete x.setAsideSplitPeriods
+  return x as unknown as Bill
+}
 
 type PersistSlice = {
   paySettings: PaySettings | null
@@ -53,6 +77,7 @@ type PersistSlice = {
   envelopeTransfers: EnvelopeTransfer[]
   periodNotes: PeriodNote[]
   quickExpenseTemplates: QuickExpenseTemplate[]
+  savingsAccountTransfers: SavingsAccountTransfer[]
 }
 
 const emptyPersist = (): PersistSlice => ({
@@ -69,6 +94,7 @@ const emptyPersist = (): PersistSlice => ({
   envelopeTransfers: [],
   periodNotes: [],
   quickExpenseTemplates: [],
+  savingsAccountTransfers: [],
 })
 
 function takeSnapshot(s: PersistSlice): string {
@@ -80,10 +106,13 @@ function applySnapshot(json: string): PersistSlice {
   return {
     ...emptyPersist(),
     ...parsed,
-    preferences: {
+    preferences: sanitizePreferences({
       ...defaultPreferences(),
       ...(parsed.preferences ?? {}),
-    },
+    }),
+    bills: Array.isArray(parsed.bills)
+      ? parsed.bills.map(sanitizeBill)
+      : emptyPersist().bills,
   }
 }
 
@@ -126,6 +155,9 @@ interface FinanceState extends PersistSlice {
   addEnvelopeTransfer: (t: Omit<EnvelopeTransfer, 'id'>) => void
   removeEnvelopeTransfer: (id: string) => void
 
+  addSavingsAccountTransfer: (t: Omit<SavingsAccountTransfer, 'id'>) => void
+  removeSavingsAccountTransfer: (id: string) => void
+
   upsertPeriodNote: (row: Omit<PeriodNote, 'id'>) => void
   removePeriodNote: (id: string) => void
 
@@ -158,6 +190,7 @@ function withUndo(
     envelopeTransfers: state.envelopeTransfers,
     periodNotes: state.periodNotes,
     quickExpenseTemplates: state.quickExpenseTemplates,
+    savingsAccountTransfers: state.savingsAccountTransfers,
   }
   const snap = takeSnapshot(slice)
   return {
@@ -195,24 +228,25 @@ export const useFinanceStore = create<FinanceState>()(
       replaceFromBackup: (payload) =>
         set({
           paySettings: sanitizePaySettings(payload.paySettings),
-          bills: payload.bills,
+          bills: payload.bills.map(sanitizeBill),
           envelopes: payload.envelopes ?? [],
           oneOffItems: payload.oneOffItems ?? [],
           expenseEntries: payload.expenseEntries ?? [],
           paidOutflowKeys: payload.paidOutflowKeys ?? [],
-          preferences: {
+          preferences: sanitizePreferences({
             ...defaultPreferences(),
             ...payload.preferences,
             calendarReminders:
               payload.preferences.calendarReminders ??
               defaultPreferences().calendarReminders,
-          },
+          }),
           periodBudgets: payload.periodBudgets ?? [],
           savingsGoals: payload.savingsGoals ?? [],
           incomeLines: payload.incomeLines ?? [],
           envelopeTransfers: payload.envelopeTransfers ?? [],
           periodNotes: payload.periodNotes ?? [],
           quickExpenseTemplates: payload.quickExpenseTemplates ?? [],
+          savingsAccountTransfers: payload.savingsAccountTransfers ?? [],
           undoSnapshots: [],
         }),
 
@@ -432,6 +466,25 @@ export const useFinanceStore = create<FinanceState>()(
           }),
         ),
 
+      addSavingsAccountTransfer: (t) =>
+        set((state) =>
+          withUndo(state, {
+            savingsAccountTransfers: [
+              ...state.savingsAccountTransfers,
+              { ...t, id: newId() },
+            ],
+          }),
+        ),
+
+      removeSavingsAccountTransfer: (id) =>
+        set((state) =>
+          withUndo(state, {
+            savingsAccountTransfers: state.savingsAccountTransfers.filter(
+              (x) => x.id !== id,
+            ),
+          }),
+        ),
+
       upsertPeriodNote: (row) =>
         set((state) => {
           const rest = state.periodNotes.filter(
@@ -518,14 +571,6 @@ export const useFinanceStore = create<FinanceState>()(
                 delete stripped.confidence
                 next = stripped
               }
-              if (
-                Object.prototype.hasOwnProperty.call(patch, 'trackSetAside') &&
-                patch.trackSetAside === undefined
-              ) {
-                const stripped = { ...next }
-                delete stripped.trackSetAside
-                next = stripped
-              }
               return next
             }),
           }),
@@ -551,27 +596,32 @@ export const useFinanceStore = create<FinanceState>()(
           return {
             ...merged,
             paySettings: sanitizePaySettings(merged.paySettings),
+            preferences: sanitizePreferences(merged.preferences),
+            bills: merged.bills.map(sanitizeBill),
           }
         }
         const welcomeDismissedAt =
           'welcomeDismissedAt' in prevPrefs
             ? prevPrefs.welcomeDismissedAt
             : new Date().toISOString()
+        const mergedPrefs = sanitizePreferences({
+          ...defaultPreferences(),
+          ...prevPrefs,
+          welcomeDismissedAt,
+          calendarReminders: Array.isArray(prevPrefs.calendarReminders)
+            ? prevPrefs.calendarReminders
+            : [],
+        })
         const merged = {
           ...current,
           ...p,
-          preferences: {
-            ...defaultPreferences(),
-            ...prevPrefs,
-            welcomeDismissedAt,
-            calendarReminders: Array.isArray(prevPrefs.calendarReminders)
-              ? prevPrefs.calendarReminders
-              : [],
-          },
+          preferences: mergedPrefs,
         } as FinanceState
         return {
           ...merged,
           paySettings: sanitizePaySettings(merged.paySettings),
+          preferences: sanitizePreferences(merged.preferences),
+          bills: merged.bills.map(sanitizeBill),
         }
       },
       partialize: (state) => ({
@@ -588,6 +638,7 @@ export const useFinanceStore = create<FinanceState>()(
         envelopeTransfers: state.envelopeTransfers,
         periodNotes: state.periodNotes,
         quickExpenseTemplates: state.quickExpenseTemplates,
+        savingsAccountTransfers: state.savingsAccountTransfers,
       }),
     },
   ),

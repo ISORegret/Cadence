@@ -1,9 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
+import { BankImportPage } from './pages/BankImportPage'
 import { BillsPage } from './pages/BillsPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { DebtTool } from './pages/DebtTool'
+import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { Summary } from './pages/Summary'
 import { UpcomingPage } from './pages/UpcomingPage'
@@ -37,6 +39,8 @@ export default function App() {
               }
             />
             <Route path="debt" element={<DebtTool />} />
+            <Route path="subscriptions" element={<SubscriptionsPage />} />
+            <Route path="import" element={<BankImportPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -1,4 +1,11 @@
-import type { Bill, ExpenseEntry, IncomeLine, OneOffItem, PaySettings } from '../types'
+import type {
+  Bill,
+  ExpenseEntry,
+  IncomeLine,
+  OneOffItem,
+  PaySettings,
+  SavingsAccountTransfer,
+} from '../types'
 import type { CurrentPayPeriod } from './payPeriod'
 import {
   minProjectedBalanceAfterFromStartingFunds,
@@ -14,6 +21,7 @@ export function minProjectedBalanceAfter(options: {
   expenseEntries: ExpenseEntry[]
   incomeLines: IncomeLine[]
   legacyPreferences?: StartingFundsLegacyPrefs
+  savingsAccountTransfers?: SavingsAccountTransfer[]
 }): number | null {
   return minProjectedBalanceAfterFromStartingFunds(options)
 }

@@ -16,14 +16,14 @@ import {
   startOfDay,
   startOfMonth,
 } from 'date-fns'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { formatMoney } from '../lib/money'
 import { sumByCategory } from '../lib/budgetMath'
 import {
   estimatedTakeHomeInRange,
-  getCurrentPayPeriod,
   getPayPeriodAtOffset,
+  payPeriodInclusiveLastDay,
   listExpenseOutflowsInRange,
   listOneOffOutflowsInRange,
   listOutflowsInRange,
@@ -33,20 +33,24 @@ import {
   toISODate,
   totalAmount,
 } from '../lib/payPeriod'
-import { projectedBalanceEndOfDay } from '../lib/cashProjection'
+import { calendarMonthTimeline, payPeriodTimeline } from '../lib/periodTimeline'
 import { buildWithdrawalsIcs, downloadIcs } from '../lib/icsExport'
 import type { Outflow } from '../types'
 import { CategorySpendDonut } from '../components/CategorySpendDonut'
 import { PageUndo } from '../components/PageUndo'
 import { categoryDotClass } from '../lib/categoryColors'
 import {
-  getStartingFunds,
   hasStartingFunds,
   periodRunningRowsFromStartingFunds,
 } from '../lib/startingFunds'
-import { minProjectedBalanceAfter } from '../lib/runningBalance'
+import { useUndoToast } from '../contexts/UndoToastContext'
+import { hasSavingsAnchor } from '../lib/savingsAccount'
+import { useCadenceHealth } from '../hooks/useCadenceHealth'
+import { CashflowStandingBadge } from '../components/CashflowStandingBadge'
+import { PeriodTimelineBar } from '../components/PeriodTimelineBar'
 import { useFinanceStore } from '../store/financeStore'
 import { CashflowStrip } from '../components/CashflowStrip'
+import { WhatIfStressPresets } from '../components/WhatIfStressPresets'
 
 const SUGGESTED = [
   'Housing',
@@ -70,6 +74,7 @@ export function Summary() {
   const oneOffItems = useFinanceStore((s) => s.oneOffItems)
   const expenseEntries = useFinanceStore((s) => s.expenseEntries)
   const incomeLines = useFinanceStore((s) => s.incomeLines)
+  const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
   const periodBudgets = useFinanceStore((s) => s.periodBudgets)
   const savingsGoals = useFinanceStore((s) => s.savingsGoals)
   const paidKeys = useFinanceStore((s) => s.paidOutflowKeys)
@@ -87,11 +92,20 @@ export function Summary() {
   const removeQuickExpenseTemplate = useFinanceStore(
     (s) => s.removeQuickExpenseTemplate,
   )
-
-  const [catFilter, setCatFilter] = useState('')
-  const [envFilter, setEnvFilter] = useState('')
+  const addSavingsAccountTransfer = useFinanceStore(
+    (s) => s.addSavingsAccountTransfer,
+  )
+  const catFilter = preferences.summaryCategoryFilter ?? ''
+  const envFilter = preferences.summaryEnvelopeFilter ?? ''
+  const setCatFilter = (v: string) =>
+    setPreferences({ summaryCategoryFilter: v || undefined })
+  const setEnvFilter = (v: string) =>
+    setPreferences({ summaryEnvelopeFilter: v || undefined })
   const [budgetKind, setBudgetKind] = useState<'category' | 'envelope'>('category')
   const [withdrawalSearch, setWithdrawalSearch] = useState('')
+  const withdrawalSearchRef = useRef<HTMLInputElement>(null)
+  const searchPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const withdrawalSearchHydrated = useRef(false)
   const [whatIfIncomeAdj, setWhatIfIncomeAdj] = useState(0)
   const [whatIfDueAdj, setWhatIfDueAdj] = useState(0)
   const [qeNote, setQeNote] = useState('')
@@ -99,26 +113,43 @@ export function Summary() {
   const [qeDate, setQeDate] = useState(() => toISODate(new Date()))
   const [qeCat, setQeCat] = useState('')
   const [qeEnv, setQeEnv] = useState('')
+  const [qtAmount, setQtAmount] = useState('')
+  const [qtDate, setQtDate] = useState(() => toISODate(new Date()))
+  const [qtDir, setQtDir] = useState<'to_savings' | 'from_savings'>(
+    'to_savings',
+  )
+  const [qtNote, setQtNote] = useState('')
   const [searchParams, setSearchParams] = useSearchParams()
   const [withdrawalLinkMiss, setWithdrawalLinkMiss] = useState<string | null>(null)
+  const [withdrawalPayPeriodOffset, setWithdrawalPayPeriodOffset] = useState(0)
   const withdrawalKeyParam = searchParams.get('withdrawalKey')
   const [notifPermissionUi, setNotifPermissionUi] = useState<
     'pending' | CadenceNotificationPermissionUi
   >('pending')
-  const today = new Date()
-  const todayStr = toISODate(today)
-
   const money = (n: number) => formatMoney(n, paySettings)
+  const showUndoToast = useUndoToast()
 
-  const period = paySettings
-    ? getCurrentPayPeriod(today, paySettings)
+  const {
+    today,
+    todayStr,
+    period,
+    projectedBalanceEndOfToday,
+    projectedBalanceEndOfPayPeriod,
+    projectedSavingsEndOfToday,
+    safeToSpend,
+    minBalProjected,
+    standing,
+  } = useCadenceHealth()
+
+  const viewedPayPeriod = paySettings
+    ? getPayPeriodAtOffset(today, paySettings, withdrawalPayPeriodOffset)
     : null
 
   const summaryViewMode = preferences.summaryViewMode ?? 'pay_period'
   const summaryDensity = preferences.summaryDensity ?? 'simple'
 
   const viewWindow = useMemo(() => {
-    if (!period) return null
+    if (!paySettings) return null
     if (summaryViewMode === 'calendar_month') {
       const ms = startOfMonth(today)
       return {
@@ -127,12 +158,69 @@ export function Summary() {
         mode: 'calendar_month' as const,
       }
     }
+    if (!viewedPayPeriod) return null
     return {
-      intervalStart: period.intervalStart,
-      intervalEndExclusive: period.intervalEndExclusive,
+      intervalStart: viewedPayPeriod.intervalStart,
+      intervalEndExclusive: viewedPayPeriod.intervalEndExclusive,
       mode: 'pay_period' as const,
     }
-  }, [period, summaryViewMode, today])
+  }, [paySettings, summaryViewMode, today, viewedPayPeriod])
+
+  useEffect(() => {
+    if (summaryViewMode === 'calendar_month') setWithdrawalPayPeriodOffset(0)
+  }, [summaryViewMode])
+
+  const monthTimeline = useMemo(
+    () => calendarMonthTimeline(today),
+    [todayStr],
+  )
+
+  const payTimeline = useMemo(() => {
+    if (!viewedPayPeriod) return null
+    return payPeriodTimeline(
+      today,
+      viewedPayPeriod,
+      withdrawalPayPeriodOffset === 0,
+    )
+  }, [today, viewedPayPeriod, withdrawalPayPeriodOffset])
+
+  useEffect(() => {
+    const hydrate = () => {
+      const p = useFinanceStore.getState().preferences
+      setWithdrawalSearch(p.summaryWithdrawalSearch ?? '')
+      if (p.lastQuickExpenseCategory)
+        setQeCat(p.lastQuickExpenseCategory)
+      if (p.lastQuickExpenseEnvelopeId)
+        setQeEnv(p.lastQuickExpenseEnvelopeId)
+      withdrawalSearchHydrated.current = true
+    }
+    if (useFinanceStore.persist.hasHydrated()) hydrate()
+    return useFinanceStore.persist.onFinishHydration(hydrate)
+  }, [])
+
+  useEffect(() => {
+    if (!withdrawalSearchHydrated.current) return
+    if (searchPersistTimer.current) clearTimeout(searchPersistTimer.current)
+    searchPersistTimer.current = setTimeout(() => {
+      setPreferences({
+        summaryWithdrawalSearch: withdrawalSearch.trim() || undefined,
+      })
+    }, 450)
+    return () => {
+      if (searchPersistTimer.current) clearTimeout(searchPersistTimer.current)
+    }
+  }, [withdrawalSearch, setPreferences])
+
+  useEffect(() => {
+    const onFocusSearch = () => withdrawalSearchRef.current?.focus()
+    window.addEventListener('cadence:focusWithdrawalSearch', onFocusSearch)
+    return () =>
+      window.removeEventListener('cadence:focusWithdrawalSearch', onFocusSearch)
+  }, [])
+
+  const exportWindowStartStr = viewWindow
+    ? toISODate(viewWindow.intervalStart)
+    : ''
 
   const allOutflows = useMemo(() => {
     if (!viewWindow) return []
@@ -181,6 +269,99 @@ export function Summary() {
           .toLowerCase()
         return hay.includes(withdrawalSearchNorm)
       })
+
+  const prevComparisonWindow = useMemo(() => {
+    if (!paySettings) return null
+    if (summaryViewMode === 'calendar_month') {
+      const ms = startOfMonth(today)
+      const prevStart = addMonths(ms, -1)
+      return { intervalStart: prevStart, intervalEndExclusive: ms }
+    }
+    if (!viewedPayPeriod) return null
+    return getPayPeriodAtOffset(today, paySettings, withdrawalPayPeriodOffset - 1)
+  }, [
+    paySettings,
+    summaryViewMode,
+    today,
+    viewedPayPeriod,
+    withdrawalPayPeriodOffset,
+  ])
+
+  const prevAllOutflows = useMemo(() => {
+    if (!prevComparisonWindow) return []
+    return mergeAllOutflowLists([
+      listOutflowsInRange(
+        bills,
+        prevComparisonWindow.intervalStart,
+        prevComparisonWindow.intervalEndExclusive,
+      ),
+      listOneOffOutflowsInRange(
+        oneOffItems,
+        prevComparisonWindow.intervalStart,
+        prevComparisonWindow.intervalEndExclusive,
+      ),
+      listExpenseOutflowsInRange(
+        expenseEntries,
+        prevComparisonWindow.intervalStart,
+        prevComparisonWindow.intervalEndExclusive,
+      ),
+    ])
+  }, [bills, oneOffItems, expenseEntries, prevComparisonWindow])
+
+  const scheduledVsPriorDelta = useMemo(() => {
+    if (!prevComparisonWindow) return null
+    const filterList = (list: Outflow[]) => {
+      let next = list.filter((o) => {
+        if (catFilter && (o.category || '').trim() !== catFilter) return false
+        if (envFilter && (o.envelopeId || '') !== envFilter) return false
+        return true
+      })
+      const norm = withdrawalSearch.trim().toLowerCase()
+      if (!norm) return next
+      return next.filter((o) => {
+        const amt = String(o.amount)
+        const hay = [o.name, o.note, o.category, amt]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return hay.includes(norm)
+      })
+    }
+    return (
+      totalAmount(filterList(allOutflows)) -
+      totalAmount(filterList(prevAllOutflows))
+    )
+  }, [
+    prevComparisonWindow,
+    prevAllOutflows,
+    allOutflows,
+    catFilter,
+    envFilter,
+    withdrawalSearch,
+  ])
+
+  const togglePaidWithUndo = (pk: string) => {
+    const paid = paidKeys.includes(pk)
+    togglePaidKey(pk)
+    showUndoToast({
+      message: paid ? 'Marked as unpaid' : 'Marked as paid',
+      onUndo: () => togglePaidKey(pk),
+    })
+  }
+
+  const hasActiveSummaryFilters = Boolean(
+    catFilter || envFilter || withdrawalSearch.trim(),
+  )
+
+  const clearSummaryFilters = () => {
+    setPreferences({
+      summaryCategoryFilter: undefined,
+      summaryEnvelopeFilter: undefined,
+      summaryWithdrawalSearch: undefined,
+    })
+    setWithdrawalSearch('')
+    withdrawalSearchHydrated.current = true
+  }
 
   useEffect(() => {
     if (!withdrawalKeyParam) return
@@ -325,6 +506,7 @@ export function Summary() {
         expenseEntries,
         incomeLines,
         legacyPreferences: preferences,
+        savingsAccountTransfers,
       }) ?? []
     )
   }, [
@@ -335,92 +517,13 @@ export function Summary() {
     expenseEntries,
     incomeLines,
     preferences,
+    savingsAccountTransfers,
   ])
-
-  const projectedBalanceEndOfToday = useMemo(() => {
-    if (!paySettings) return null
-    if (!hasStartingFunds(paySettings, preferences)) return null
-    const { date, amount } = getStartingFunds(paySettings, preferences)
-    if (date == null || amount == null) return null
-    return projectedBalanceEndOfDay(
-      date,
-      amount,
-      todayStr,
-      paySettings,
-      bills,
-      oneOffItems,
-      expenseEntries,
-      incomeLines,
-    )
-  }, [
-    paySettings,
-    todayStr,
-    bills,
-    oneOffItems,
-    expenseEntries,
-    incomeLines,
-    preferences,
-  ])
-
-  const projectedBalanceEndOfPayPeriod = useMemo(() => {
-    if (!paySettings || !period) return null
-    if (!hasStartingFunds(paySettings, preferences)) return null
-    const { date, amount } = getStartingFunds(paySettings, preferences)
-    if (date == null || amount == null) return null
-    const lastDay = toISODate(addDays(period.intervalEndExclusive, -1))
-    if (date > lastDay) return null
-    return projectedBalanceEndOfDay(
-      date,
-      amount,
-      lastDay,
-      paySettings,
-      bills,
-      oneOffItems,
-      expenseEntries,
-      incomeLines,
-    )
-  }, [
-    paySettings,
-    period,
-    bills,
-    oneOffItems,
-    expenseEntries,
-    incomeLines,
-    preferences,
-  ])
-
-  const safeToSpend = useMemo(() => {
-    if (projectedBalanceEndOfPayPeriod === null) return null
-    const buf = preferences.safeSpendBufferAmount
-    const b = typeof buf === 'number' && !Number.isNaN(buf) ? buf : 0
-    return projectedBalanceEndOfPayPeriod - b
-  }, [projectedBalanceEndOfPayPeriod, preferences.safeSpendBufferAmount])
 
   const whatIfProjectedEndApprox = useMemo(() => {
     if (projectedBalanceEndOfPayPeriod === null) return null
     return projectedBalanceEndOfPayPeriod + whatIfIncomeAdj - whatIfDueAdj
   }, [projectedBalanceEndOfPayPeriod, whatIfIncomeAdj, whatIfDueAdj])
-
-  const minBalProjected = useMemo(() => {
-    if (!paySettings || !period) return null
-    return minProjectedBalanceAfter({
-      paySettings,
-      period,
-      bills,
-      oneOffItems,
-      expenseEntries,
-      incomeLines,
-      legacyPreferences: preferences,
-    })
-  }, [
-    paySettings,
-    period,
-    bills,
-    oneOffItems,
-    expenseEntries,
-    incomeLines,
-    preferences,
-  ])
 
   const categoryPrevTotals = useMemo(() => {
     if (!paySettings || !period) return null
@@ -459,6 +562,23 @@ export function Summary() {
     summaryViewMode,
     today,
   ])
+
+  const categoryMovers = useMemo(() => {
+    if (!categoryPrevTotals) return []
+    const keys = new Set<string>([
+      ...categoryTotals.keys(),
+      ...categoryPrevTotals.keys(),
+    ])
+    return [...keys]
+      .map((cat) => {
+        const cur = categoryTotals.get(cat) ?? 0
+        const prev = categoryPrevTotals.get(cat) ?? 0
+        return { cat, delta: cur - prev, cur, prev }
+      })
+      .filter((r) => r.delta !== 0)
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+      .slice(0, 5)
+  }, [categoryTotals, categoryPrevTotals])
 
   const stripOutflows = useMemo(() => {
     if (!paySettings) return []
@@ -609,11 +729,13 @@ export function Summary() {
 
       {showBackupNudge && (
         <div className="print:hidden rounded-2xl border border-amber-300/40 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-sm backdrop-blur-sm dark:border-amber-500/25 dark:bg-amber-950/35 dark:text-amber-50">
-          <strong>Backup reminder:</strong> you have not exported a backup
-          {backupDaysSince !== null
-            ? ` in ${backupDaysSince} days`
-            : ''}
-          . Use{' '}
+          <strong>Backup reminder:</strong>{' '}
+          {!preferences.lastExportAt
+            ? 'You have never exported a backup.'
+            : backupDaysSince !== null
+              ? `Your last backup was ${backupDaysSince} day${backupDaysSince === 1 ? '' : 's'} ago.`
+              : 'Export again soon.'}{' '}
+          Use{' '}
           <Link to="/settings" className="link-accent">
             Settings → Export backup
           </Link>{' '}
@@ -646,7 +768,7 @@ export function Summary() {
                         : 'that bill'
                     })()}
             </strong>{' '}
-            in this pay period. It may fall in a different pay window. Check the{' '}
+            in this pay period. It may fall in a different pay period. Check the{' '}
             <Link to="/calendar" className="link-accent">
               Calendar
             </Link>{' '}
@@ -726,9 +848,46 @@ export function Summary() {
           </div>
         </div>
 
+        {hasActiveSummaryFilters ? (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="text-xs font-semibold text-emerald-700 underline decoration-emerald-600/40 underline-offset-2 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
+              onClick={clearSummaryFilters}
+            >
+              Clear filters &amp; search
+            </button>
+          </div>
+        ) : null}
+
         <div className="card-hero relative z-0">
           <div className="relative z-10">
-            <p className="section-label">This period</p>
+            <div className="mb-2 flex flex-wrap items-start justify-between gap-2 print:hidden">
+              <p className="section-label mb-0">This period</p>
+              <CashflowStandingBadge
+                standing={standing}
+                detail={{
+                  formatMoney: money,
+                  hasAnchor: Boolean(
+                    paySettings && hasStartingFunds(paySettings, preferences),
+                  ),
+                  projectedEndOfPayPeriod: projectedBalanceEndOfPayPeriod,
+                  minBalProjected,
+                  safeToSpend,
+                  lowBalanceAlertEnabled: preferences.lowBalanceAlertEnabled === true,
+                  lowBalanceThreshold:
+                    typeof preferences.lowBalanceThreshold === 'number'
+                      ? preferences.lowBalanceThreshold
+                      : null,
+                }}
+              />
+            </div>
+            <PeriodTimelineBar
+              summaryViewMode={summaryViewMode}
+              monthDay={monthTimeline.dayOfMonth}
+              monthTotal={monthTimeline.daysInMonth}
+              payTimeline={payTimeline}
+            />
             {viewWindow?.mode === 'calendar_month' ? (
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 <span className="font-semibold text-slate-900 dark:text-white">
@@ -738,38 +897,100 @@ export function Summary() {
                   Calendar month — items dated in this month.
                 </span>
               </p>
-            ) : (
+            ) : viewedPayPeriod ? (
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                {format(period.lastPayday, 'EEEE, MMM d')} →{' '}
+                {format(viewedPayPeriod.intervalStart, 'EEEE, MMM d')} →{' '}
                 <span className="font-semibold text-slate-900 dark:text-white">
-                  {format(period.nextPayday, 'EEEE, MMM d')}
-                </span>{' '}
-                <span className="text-slate-500 dark:text-slate-500">(next payday)</span>
+                  {format(payPeriodInclusiveLastDay(viewedPayPeriod), 'EEEE, MMM d')}
+                </span>
+                <span className="block text-xs text-slate-500 dark:text-slate-500">
+                  Next payday {format(viewedPayPeriod.nextPayday, 'EEEE, MMM d')}
+                  {withdrawalPayPeriodOffset !== 0 ? (
+                    <span className="block pt-1 text-amber-700 dark:text-amber-300">
+                      Viewing a different pay period — totals below match these dates.
+                    </span>
+                  ) : null}
+                </span>
               </p>
-            )}
-            <p
-              className="mt-5 text-3xl font-bold tracking-tight text-slate-900 dark:text-white"
-              aria-live="polite"
-            >
-              {money(totalScheduled)}
-            </p>
+            ) : null}
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <p
+                className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white"
+                aria-live="polite"
+              >
+                {money(totalScheduled)}
+              </p>
+              <button
+                type="button"
+                title="Copy scheduled total"
+                className="btn-secondary shrink-0 !min-h-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold print:hidden"
+                onClick={() =>
+                  void navigator.clipboard.writeText(money(totalScheduled))
+                }
+              >
+                Copy
+              </button>
+            </div>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
               {viewWindow?.mode === 'calendar_month'
                 ? 'Total scheduled in this calendar month'
                 : 'Total scheduled before next payday'}
             </p>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Still unpaid:{' '}
-              <span className="font-semibold text-slate-900 dark:text-white">
-                {money(stillDue)}
+            {scheduledVsPriorDelta !== null ? (
+              <p
+                className={[
+                  'mt-1 text-xs tabular-nums',
+                  scheduledVsPriorDelta > 0
+                    ? 'text-amber-700 dark:text-amber-300'
+                    : scheduledVsPriorDelta < 0
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : 'text-slate-500 dark:text-slate-400',
+                ].join(' ')}
+              >
+                {scheduledVsPriorDelta >= 0 ? '+' : ''}
+                {money(scheduledVsPriorDelta)} vs prior{' '}
+                {summaryViewMode === 'calendar_month' ? 'month' : 'period'} (same filters)
+              </p>
+            ) : null}
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+              <span>
+                Still unpaid:{' '}
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  {money(stillDue)}
+                </span>
               </span>
+              <button
+                type="button"
+                title="Copy still unpaid total"
+                className="btn-secondary shrink-0 !min-h-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold print:hidden"
+                onClick={() => void navigator.clipboard.writeText(money(stillDue))}
+              >
+                Copy
+              </button>
             </p>
+            {projectedSavingsEndOfToday !== null ? (
+              <p className="mt-3 rounded-lg border border-violet-200/80 bg-violet-50/70 px-3 py-2 text-sm text-violet-950 dark:border-violet-800/50 dark:bg-violet-950/30 dark:text-violet-100">
+                <span className="font-semibold">Savings (projected)</span>{' '}
+                <span className="tabular-nums">{money(projectedSavingsEndOfToday)}</span>
+                <span className="mt-0.5 block text-[11px] font-normal text-violet-900/85 dark:text-violet-200/90">
+                  Baseline and transfers on{' '}
+                  <Link to="/settings#savings-account" className="underline decoration-violet-600/40">
+                    Settings
+                  </Link>
+                  . Checking projection includes moves between accounts.
+                </span>
+              </p>
+            ) : null}
             {summaryDensity === 'simple' ? (
               <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                 <strong className="font-medium text-slate-600 dark:text-slate-300">
                   Scheduled
                 </strong>{' '}
-                is everything in this window.{' '}
+                is everything dated in{' '}
+                {summaryViewMode === 'calendar_month'
+                  ? 'this calendar month'
+                  : 'this pay period'}
+                .{' '}
                 <strong className="font-medium text-slate-600 dark:text-slate-300">
                   Still unpaid
                 </strong>{' '}
@@ -824,6 +1045,7 @@ export function Summary() {
                 ))}
               </select>
               <input
+                ref={withdrawalSearchRef}
                 type="search"
                 value={withdrawalSearch}
                 onChange={(e) => setWithdrawalSearch(e.target.value)}
@@ -863,6 +1085,7 @@ export function Summary() {
                     ))}
                   </select>
                   <input
+                    ref={withdrawalSearchRef}
                     type="search"
                     value={withdrawalSearch}
                     onChange={(e) => setWithdrawalSearch(e.target.value)}
@@ -875,10 +1098,10 @@ export function Summary() {
                       onClick={() => {
                         const ics = buildWithdrawalsIcs(
                           filtered,
-                          `Cadence · ${periodStartStr}`,
+                          `Cadence · ${exportWindowStartStr}`,
                         )
                         void downloadIcs(
-                          `cadence-withdrawals-${periodStartStr}.ics`,
+                          `cadence-withdrawals-${exportWindowStartStr}.ics`,
                           ics,
                         ).catch(() => {
                           window.alert('Could not save the calendar file.')
@@ -909,7 +1132,7 @@ export function Summary() {
                         const lines = [
                           `Cadence — ${summaryViewMode === 'calendar_month' ? 'Calendar month' : 'Pay period'}`,
                           viewWindow
-                            ? `Window: ${format(viewWindow.intervalStart, 'MMM d')} – ${format(
+                            ? `Period: ${format(viewWindow.intervalStart, 'MMM d')} – ${format(
                                 addDays(viewWindow.intervalEndExclusive, -1),
                                 'MMM d, yyyy',
                               )}`
@@ -917,14 +1140,17 @@ export function Summary() {
                           `Scheduled (filtered): ${money(totalScheduled)}`,
                           `Still due (unpaid): ${money(stillDue)}`,
                         ]
-                        if (income !== null) lines.push(`Estimated income (window): ${money(income)}`)
+                        if (income !== null)
+                          lines.push(`Estimated income (this period): ${money(income)}`)
                         if (projectedBalanceEndOfPayPeriod !== null) {
                           lines.push(
                             `Projected balance end of pay period: ${money(projectedBalanceEndOfPayPeriod)}`,
                           )
                         }
                         if (safeToSpend !== null) {
-                          lines.push(`Safe to spend (after buffer): ${money(safeToSpend)}`)
+                          lines.push(
+                            `Safe to spend (after cushion): ${money(safeToSpend)}`,
+                          )
                         }
                         void navigator.clipboard.writeText(lines.filter(Boolean).join('\n'))
                       }}
@@ -944,10 +1170,10 @@ export function Summary() {
               onClick={() => {
                 const ics = buildWithdrawalsIcs(
                   filtered,
-                  `Cadence · ${periodStartStr}`,
+                  `Cadence · ${exportWindowStartStr}`,
                 )
                 void downloadIcs(
-                  `cadence-withdrawals-${periodStartStr}.ics`,
+                  `cadence-withdrawals-${exportWindowStartStr}.ics`,
                   ics,
                 ).catch(() => {
                   window.alert('Could not save the calendar file.')
@@ -974,7 +1200,7 @@ export function Summary() {
                 const lines = [
                   `Cadence — ${summaryViewMode === 'calendar_month' ? 'Calendar month' : 'Pay period'}`,
                   viewWindow
-                    ? `Window: ${format(viewWindow.intervalStart, 'MMM d')} – ${format(
+                    ? `Period: ${format(viewWindow.intervalStart, 'MMM d')} – ${format(
                         addDays(viewWindow.intervalEndExclusive, -1),
                         'MMM d, yyyy',
                       )}`
@@ -982,12 +1208,15 @@ export function Summary() {
                   `Scheduled (filtered): ${money(totalScheduled)}`,
                   `Still due (unpaid): ${money(stillDue)}`,
                 ]
-                if (income !== null) lines.push(`Estimated income (window): ${money(income)}`)
+                if (income !== null)
+                  lines.push(`Estimated income (this period): ${money(income)}`)
                 if (projectedBalanceEndOfPayPeriod !== null) {
                   lines.push(`Projected balance end of pay period: ${money(projectedBalanceEndOfPayPeriod)}`)
                 }
                 if (safeToSpend !== null) {
-                  lines.push(`Safe to spend (after buffer): ${money(safeToSpend)}`)
+                  lines.push(
+                    `Safe to spend (after cushion): ${money(safeToSpend)}`,
+                  )
                 }
                 void navigator.clipboard.writeText(lines.filter(Boolean).join('\n'))
               }}
@@ -1005,7 +1234,7 @@ export function Summary() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-      <div className="card">
+      <div className="card scroll-mt-24" id="quick-expense-section">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3 dark:border-white/10">
           <div className="min-w-0">
             <p className="section-label">Spend</p>
@@ -1068,11 +1297,13 @@ export function Summary() {
               category: qeCat.trim() || undefined,
               envelopeId: qeEnv.trim() || undefined,
             })
+            setPreferences({
+              lastQuickExpenseCategory: qeCat.trim() || undefined,
+              lastQuickExpenseEnvelopeId: qeEnv.trim() || undefined,
+            })
             setQeNote('')
             setQeAmount('')
             setQeDate(todayStr)
-            setQeCat('')
-            setQeEnv('')
           }}
         >
           <input
@@ -1142,6 +1373,84 @@ export function Summary() {
             Save as template
           </button>
         </form>
+
+        <div className="mt-5 border-t border-slate-100 pt-4 dark:border-white/10">
+          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+            Quick transfer
+          </h4>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Log money moved between checking and savings — updates projected checking (and savings
+            if you set a baseline on{' '}
+            <Link to="/settings#savings-account" className="link-accent">
+              Settings
+            </Link>
+            ).
+          </p>
+          <form
+            className="mt-3 flex flex-wrap gap-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const amount = Number(qtAmount)
+              if (!qtDate.trim() || !Number.isFinite(amount) || amount <= 0) return
+              addSavingsAccountTransfer({
+                date: qtDate.trim(),
+                amount,
+                direction: qtDir,
+                note: qtNote.trim() || undefined,
+              })
+              setQtAmount('')
+              setQtNote('')
+              setQtDate(todayStr)
+            }}
+          >
+            <input
+              value={qtAmount}
+              onChange={(e) => setQtAmount(e.target.value)}
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Amount"
+              className="input-field w-28"
+              required
+              aria-label="Transfer amount"
+            />
+            <input
+              value={qtDate}
+              onChange={(e) => setQtDate(e.target.value)}
+              type="date"
+              className="input-field"
+              required
+              aria-label="Transfer date"
+            />
+            <select
+              value={qtDir}
+              onChange={(e) =>
+                setQtDir(e.target.value as 'to_savings' | 'from_savings')
+              }
+              className="select-field !py-1.5 text-sm"
+              aria-label="Transfer direction"
+            >
+              <option value="to_savings">To savings</option>
+              <option value="from_savings">From savings</option>
+            </select>
+            <input
+              value={qtNote}
+              onChange={(e) => setQtNote(e.target.value)}
+              placeholder="Note (optional)"
+              className="input-field min-w-[8rem] flex-1"
+            />
+            <button type="submit" className="btn-solid !py-2 text-sm">
+              Add transfer
+            </button>
+          </form>
+          {!hasSavingsAnchor(paySettings) ? (
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              Transfers still affect <span className="font-medium text-slate-600 dark:text-slate-300">checking</span>{' '}
+              projections. Add a savings balance on Settings to see{' '}
+              <span className="font-medium text-slate-600 dark:text-slate-300">Savings (projected)</span> in the hero.
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {showCashFlowCard ? (
@@ -1155,14 +1464,22 @@ export function Summary() {
               <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Estimated income (take-home + extra lines in this window)
+                    Estimated income (take-home + extra lines in{' '}
+                    {summaryViewMode === 'calendar_month'
+                      ? 'this calendar month'
+                      : 'this pay period'}
+                    )
                   </p>
                   <p className="text-lg font-semibold tabular-nums text-slate-900 dark:text-white">
                     {money(hypoIncome!)}
                   </p>
                   {takeHomeForView && takeHomeForView.paydayCount > 1 ? (
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      {takeHomeForView.paydayCount} paychecks in this window. Extra income
+                      {takeHomeForView.paydayCount} paychecks in{' '}
+                      {summaryViewMode === 'calendar_month'
+                        ? 'this calendar month'
+                        : 'this pay period'}
+                      . Extra income
                       lines apply per paycheck (
                       <Link to="/settings" className="link-accent">
                         Settings
@@ -1241,6 +1558,11 @@ export function Summary() {
                         />
                       </label>
                     </div>
+                    <WhatIfStressPresets
+                      periodIncome={income}
+                      setWhatIfIncomeAdj={setWhatIfIncomeAdj}
+                      setWhatIfDueAdj={setWhatIfDueAdj}
+                    />
                     {whatIfProjectedEndApprox !== null &&
                     (whatIfIncomeAdj !== 0 || whatIfDueAdj !== 0) ? (
                       <div className="rounded-xl border border-sky-200/80 bg-sky-50/90 px-4 py-3 dark:border-sky-800/50 dark:bg-sky-950/30">
@@ -1302,6 +1624,11 @@ export function Summary() {
                       />
                     </label>
                   </div>
+                  <WhatIfStressPresets
+                    periodIncome={income}
+                    setWhatIfIncomeAdj={setWhatIfIncomeAdj}
+                    setWhatIfDueAdj={setWhatIfDueAdj}
+                  />
                   {whatIfProjectedEndApprox !== null &&
                   (whatIfIncomeAdj !== 0 || whatIfDueAdj !== 0) ? (
                     <div className="mt-4 rounded-xl border border-sky-200/80 bg-sky-50/90 px-4 py-3 dark:border-sky-800/50 dark:bg-sky-950/30">
@@ -1355,11 +1682,8 @@ export function Summary() {
                 {money(safeToSpend)}
               </p>
               <p className="mt-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                Projected balance at the end of the current pay period minus your cushion in{' '}
-                <Link to="/settings" className="link-accent">
-                  Settings
-                </Link>
-                . Not a guarantee — it follows your scheduled items only.
+                Starts from the headline projected balance at the end of this pay period (scheduled
+                bills and withdrawals on their dates), then subtracts your cushion from Settings.
               </p>
             </div>
           ) : null}
@@ -1514,7 +1838,7 @@ export function Summary() {
           Next 14 days (all schedules)
         </h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Days with at least one withdrawal or expense — not limited to the window above.
+          Days with at least one withdrawal or expense — not limited to the period above.
         </p>
         <div className="mt-3">
           <CashflowStrip
@@ -1533,8 +1857,10 @@ export function Summary() {
           {summaryViewMode === 'calendar_month' ? 'this month' : 'this period'})
         </h3>
         <p className="mt-1 text-xs text-slate-500">
-          All scheduled withdrawals in the window, including quick expenses. “vs prior”
-          compares to the previous {summaryViewMode === 'calendar_month' ? 'month' : 'pay period'}.
+          All scheduled withdrawals in{' '}
+          {summaryViewMode === 'calendar_month' ? 'this calendar month' : 'this pay period'},
+          including quick expenses. “vs prior” compares to the previous{' '}
+          {summaryViewMode === 'calendar_month' ? 'month' : 'pay period'}.
         </p>
         {categoryTotals.size === 0 ? (
           <p className="mt-3 text-sm text-slate-500">No categorized spending yet.</p>
@@ -1592,12 +1918,14 @@ export function Summary() {
           Period budgets
         </h3>
         <p className="mt-1 text-xs text-slate-500">
-          Compare what you planned vs scheduled totals for this pay window. Budgets always
+          Compare what you planned vs scheduled totals for this pay period. Budgets always
           match the{' '}
           <strong className="font-medium text-slate-700 dark:text-slate-300">
             current pay period
           </strong>{' '}
-          ({format(period.lastPayday, 'MMM d')} → {format(period.nextPayday, 'MMM d')}), not the
+          ({format(period.intervalStart, 'MMM d')} →{' '}
+          {format(payPeriodInclusiveLastDay(period), 'MMM d')}, next payday {format(period.nextPayday, 'MMM d')}),
+          not the
           calendar month toggle.
         </p>
         <form
@@ -1755,6 +2083,50 @@ export function Summary() {
         )}
       </div>
       </div>
+
+      {categoryMovers.length > 0 ? (
+        <div className="card print:hidden">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+            Largest category swings (vs prior{' '}
+            {summaryViewMode === 'calendar_month' ? 'month' : 'pay period'})
+          </h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Sorted by absolute change — useful to spot drift at a glance.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {categoryMovers.map(({ cat, delta, cur, prev }) => (
+              <li key={cat}>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="flex min-w-0 items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${categoryDotClass(cat)}`}
+                      aria-hidden
+                    />
+                    <span className="truncate">{cat}</span>
+                  </span>
+                  <span className="flex shrink-0 flex-wrap items-center justify-end gap-2 tabular-nums">
+                    <span className="text-slate-600 dark:text-slate-400">
+                      {money(prev)} → {money(cur)}
+                    </span>
+                    <span
+                      className={
+                        delta > 0
+                          ? 'text-xs font-semibold text-amber-700 dark:text-amber-300'
+                          : delta < 0
+                            ? 'text-xs font-semibold text-emerald-700 dark:text-emerald-300'
+                            : 'text-xs text-slate-500'
+                      }
+                    >
+                      {delta > 0 ? '+' : ''}
+                      {money(delta)}
+                    </span>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {savingsGoals.length > 0 && (
         <div className="card">
@@ -1920,9 +2292,48 @@ export function Summary() {
       </details>
 
       <div className="card">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
-          Withdrawals this period
-        </h2>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+              {summaryViewMode === 'calendar_month'
+                ? 'Withdrawals this month'
+                : withdrawalPayPeriodOffset === 0
+                  ? 'Withdrawals this period'
+                  : 'Withdrawals (selected pay period)'}
+            </h2>
+            {summaryViewMode === 'pay_period' && viewedPayPeriod ? (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {format(viewedPayPeriod.intervalStart, 'MMM d')} –{' '}
+                {format(payPeriodInclusiveLastDay(viewedPayPeriod), 'MMM d')}
+              </p>
+            ) : null}
+          </div>
+          {summaryViewMode === 'pay_period' && paySettings ? (
+            <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-none sm:gap-1.5 print:hidden">
+              <button
+                type="button"
+                onClick={() => setWithdrawalPayPeriodOffset((o) => o - 1)}
+                className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => setWithdrawalPayPeriodOffset(0)}
+                className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
+              >
+                This period
+              </button>
+              <button
+                type="button"
+                onClick={() => setWithdrawalPayPeriodOffset((o) => o + 1)}
+                className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+        </div>
         {filtered.length === 0 ? (
           <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
             Nothing in this filter. Adjust filters or add bills / one-offs.
@@ -1947,8 +2358,8 @@ export function Summary() {
                     <input
                       type="checkbox"
                       checked={paid}
-                      onChange={() => togglePaidKey(pk)}
-                      className="mt-1 rounded border-slate-300 dark:border-slate-600"
+                      onChange={() => togglePaidWithUndo(pk)}
+                      className="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 dark:border-slate-600"
                     />
                     <div>
                       <p className="font-medium text-slate-900 dark:text-slate-100">
@@ -2015,6 +2426,21 @@ export function Summary() {
           Today ({format(today, 'MMM d')}) — data stays on this device.
         </p>
       </div>
+
+      <button
+        type="button"
+        title="Scroll to quick expense"
+        aria-label="Quick add expense"
+        className="print:hidden fixed bottom-[max(5.25rem,env(safe-area-inset-bottom))] right-4 z-40 rounded-full border border-emerald-700/30 bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-900/25 hover:bg-emerald-700 lg:bottom-10 dark:border-emerald-400/25 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+        onClick={() =>
+          document.getElementById('quick-expense-section')?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          })
+        }
+      >
+        Quick add
+      </button>
     </div>
   )
 }

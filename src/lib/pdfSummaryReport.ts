@@ -12,6 +12,7 @@ import {
   listOutflowsInRange,
   mergeAllOutflowLists,
   paidKeyForOutflow,
+  payPeriodInclusiveLastDay,
   totalAmount,
 } from './payPeriod'
 import { getStartingFunds } from './startingFunds'
@@ -339,11 +340,11 @@ export async function downloadCadenceSummaryPdf(
     sectionBanner('Current pay period (snapshot)')
     const snapRows: [string, string][] = [
       [
-        'Pay window',
-        `${format(period.intervalStart, 'MMM d, yyyy')} → next payday ${format(period.nextPayday, 'MMM d, yyyy')}`,
+        'Pay period',
+        `${format(period.intervalStart, 'MMM d, yyyy')} → ${format(payPeriodInclusiveLastDay(period), 'MMM d, yyyy')} · next payday ${format(period.nextPayday, 'MMM d, yyyy')}`,
       ],
       [
-        'Total scheduled (this window)',
+        'Total scheduled (this pay period)',
         money(totalAmount(allOutflows)),
       ],
       ['Still due (unpaid)', money(totalAmount(unpaid))],

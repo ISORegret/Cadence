@@ -1,9 +1,6 @@
-import { format, parseISO } from 'date-fns'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { findDuplicateBill } from '../lib/duplicateBills'
-import { formatMoney } from '../lib/money'
-import { computeBillSetAside } from '../lib/setAside'
 import type { Bill, BillRecurrence, BillSchedule } from '../types'
 import { PageUndo } from '../components/PageUndo'
 import { useFinanceStore } from '../store/financeStore'
@@ -80,7 +77,6 @@ const CATEGORY_SUGGESTIONS = [
 
 export function BillsPage() {
   const bills = useFinanceStore((s) => s.bills)
-  const paySettings = useFinanceStore((s) => s.paySettings)
   const envelopes = useFinanceStore((s) => s.envelopes)
   const addBill = useFinanceStore((s) => s.addBill)
   const updateBill = useFinanceStore((s) => s.updateBill)
@@ -191,16 +187,28 @@ export function BillsPage() {
       ) {
         return
       }
+    } else {
+      const dup = findDuplicateBill(
+        bills,
+        { name, amount, schedule },
+        editingId,
+      )
+      if (
+        dup &&
+        !window.confirm(
+          `Another bill matches “${dup.name}” with the same amount and schedule. Save anyway?`,
+        )
+      ) {
+        return
+      }
     }
 
     const amountIsEstimate = fd.get('amountIsEstimate') === 'on'
-    const trackSetAside = fd.get('trackSetAside') === 'on' ? true : undefined
     const meta = {
       note,
       category,
       envelopeId,
       confidence: amountIsEstimate ? ('estimate' as const) : undefined,
-      trackSetAside,
     }
 
     if (editingId) {
@@ -247,18 +255,6 @@ export function BillsPage() {
     recurrenceMode === 'count' &&
     (kind === 'weekly' || kind === 'monthly')
 
-  const setAsideByBillId = useMemo(() => {
-    if (!paySettings) return new Map<string, ReturnType<typeof computeBillSetAside>>()
-    const m = new Map<string, ReturnType<typeof computeBillSetAside>>()
-    for (const b of bills) {
-      if (b.trackSetAside !== true) continue
-      m.set(b.id, computeBillSetAside(b, paySettings))
-    }
-    return m
-  }, [bills, paySettings])
-
-  const fmt = (n: number) => formatMoney(n, paySettings)
-
   return (
     <div className="space-y-8 text-left">
       <div>
@@ -268,9 +264,7 @@ export function BillsPage() {
         </h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Add or edit money that leaves your account. Set loans to end after a
-          number of payments or on a last date; otherwise they stay ongoing. Use
-          “Track set-aside” on a bill if you want per–pay period savings hints for
-          that payment only.
+          number of payments or on a last date; otherwise they stay ongoing.
         </p>
       </div>
 
@@ -334,17 +328,6 @@ export function BillsPage() {
             />
             <span className="text-sm text-slate-700 dark:text-slate-300">
               Amount is an estimate (not exact)
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 sm:col-span-2">
-            <input
-              type="checkbox"
-              name="trackSetAside"
-              defaultChecked={editing?.trackSetAside === true}
-              className="rounded border-slate-300 dark:border-slate-600"
-            />
-            <span className="text-sm text-slate-700 dark:text-slate-300">
-              Track set-aside (show per–pay period amount toward this bill on Bills &amp; Upcoming)
             </span>
           </label>
           <label className="block sm:col-span-2">
@@ -601,9 +584,7 @@ export function BillsPage() {
           <p className="p-6 text-sm text-slate-500">No bills yet.</p>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {bills.map((b: Bill) => {
-              const sa = setAsideByBillId.get(b.id)
-              return (
+            {bills.map((b: Bill) => (
               <li
                 key={b.id}
                 id={`bill-row-${b.id}`}
@@ -622,18 +603,6 @@ export function BillsPage() {
                     {b.category ? `${b.category} · ` : ''}
                     {scheduleLabel(b.schedule, b.recurrence)}
                   </p>
-                  {paySettings && b.trackSetAside === true && sa?.kind === 'ok' ? (
-                    <p className="mt-1 text-xs leading-snug text-emerald-700 dark:text-emerald-300">
-                      Set aside{' '}
-                      <span className="font-semibold tabular-nums">
-                        {fmt(sa.perPayPeriod)}
-                      </span>{' '}
-                      each pay period → due{' '}
-                      {format(parseISO(sa.dueIso), 'MMM d')} (
-                      {sa.payPeriodsToSaveAcross}{' '}
-                      {sa.payPeriodsToSaveAcross === 1 ? 'paycheck' : 'paychecks'} to save)
-                    </p>
-                  ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
@@ -659,7 +628,7 @@ export function BillsPage() {
                   </button>
                 </div>
               </li>
-            )})}
+            ))}
           </ul>
         )}
       </div>

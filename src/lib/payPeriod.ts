@@ -144,27 +144,51 @@ export function getPreviousPayday(before: Date, settings: PaySettings): Date {
 }
 
 export interface CurrentPayPeriod {
+  /** Payday that opens this pay period (deposit day); same as {@link intervalStart}. */
   lastPayday: Date
+  /** Next deposit date; exclusive end of `[intervalStart, intervalEndExclusive)`. */
   nextPayday: Date
-  /** Inclusive start, exclusive end for “between paydays” */
+  /** First calendar day in this pay period (payday — money from this deposit). */
   intervalStart: Date
+  /** First calendar day *not* in this pay period (= next payday). Spending covers through the prior day only. */
   intervalEndExclusive: Date
 }
 
-/** Current pay window: from last payday (inclusive) to next payday (exclusive). */
+/**
+ * Current pay period: starts on the deposit that funds it and runs through the day **before**
+ * the next deposit. If `today` is payday, that day starts the new pay period (today’s pay counts here).
+ */
 export function getCurrentPayPeriod(
   today: Date,
   settings: PaySettings,
 ): CurrentPayPeriod {
   const t = startOfDay(today)
-  const nextPayday = getNextPayday(t, settings)
-  const lastPayday = subtractOnePayPeriod(nextPayday, settings)
+  const nextOnOrAfter = getNextPayday(t, settings)
+
+  if (isEqual(t, startOfDay(nextOnOrAfter))) {
+    const followingNext = getNextPayday(addDays(t, 1), settings)
+    return {
+      lastPayday: t,
+      nextPayday: startOfDay(followingNext),
+      intervalStart: t,
+      intervalEndExclusive: startOfDay(followingNext),
+    }
+  }
+
+  const lastPayday = subtractOnePayPeriod(nextOnOrAfter, settings)
   return {
     lastPayday: startOfDay(lastPayday),
-    nextPayday: startOfDay(nextPayday),
+    nextPayday: startOfDay(nextOnOrAfter),
     intervalStart: startOfDay(lastPayday),
-    intervalEndExclusive: startOfDay(nextPayday),
+    intervalEndExclusive: startOfDay(nextOnOrAfter),
   }
+}
+
+/** Last calendar day included in `[intervalStart, intervalEndExclusive)`. */
+export function payPeriodInclusiveLastDay(
+  period: Pick<CurrentPayPeriod, 'intervalEndExclusive'>,
+): Date {
+  return startOfDay(addDays(period.intervalEndExclusive, -1))
 }
 
 /**
@@ -469,7 +493,11 @@ export function listExpenseOutflowsInRange(
 
 /** Stable key for marking an outflow as paid in the UI. */
 export function paidKeyForOutflow(o: Outflow): string {
-  if (o.source === 'oneoff' || o.source === 'expense') {
+  if (
+    o.source === 'oneoff' ||
+    o.source === 'expense' ||
+    o.source === 'savings_transfer'
+  ) {
     return o.billId
   }
   return `${o.billId}|${o.date}`

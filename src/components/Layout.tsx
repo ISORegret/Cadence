@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { format } from 'date-fns'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { UndoToastProvider } from '../contexts/UndoToastContext'
+import { payPeriodInclusiveLastDay } from '../lib/payPeriod'
 import { GlobalExperience } from './GlobalExperience'
 import { ThemeSync } from './ThemeSync'
 import { useFinanceStore } from '../store/financeStore'
+import { useCadenceHealth } from '../hooks/useCadenceHealth'
+import { CashflowStandingBadge } from './CashflowStandingBadge'
+import { HydrationRibbon } from './HydrationRibbon'
+import { KeyboardShortcuts } from './KeyboardShortcuts'
+import { ScrollRestoration } from './ScrollRestoration'
 import type { ThemePreference } from '../types'
 
 /** Monarch-style: filled pill on small screens; sidebar uses subtle tint on lg+ */
@@ -96,6 +104,22 @@ function IconScale({ className = 'size-[1.15rem] shrink-0' }: { className?: stri
   )
 }
 
+function IconRepeat({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+  )
+}
+
+function IconArrowUpTray({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+    </svg>
+  )
+}
+
 function IconBell({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -106,7 +130,14 @@ function IconBell({ className = 'size-[1.15rem] shrink-0' }: { className?: strin
 
 function isToolsSection(location: ReturnType<typeof useLocation>): boolean {
   const { pathname, hash } = location
-  if (pathname === '/year' || pathname === '/bills' || pathname === '/debt') return true
+  if (
+    pathname === '/year' ||
+    pathname === '/bills' ||
+    pathname === '/debt' ||
+    pathname === '/subscriptions' ||
+    pathname === '/import'
+  )
+    return true
   if (pathname === '/settings' && hash === '#alerts') return true
   return false
 }
@@ -121,10 +152,45 @@ function isAlertsActive(location: ReturnType<typeof useLocation>): boolean {
 
 const MENU_MIN_WIDTH = 200
 
+function MobileRouteContext() {
+  const { pathname } = useLocation()
+  const { period, paySettings } = useCadenceHealth()
+  if (pathname === '/') return null
+  const titles: Record<string, string> = {
+    '/calendar': 'Calendar',
+    '/upcoming': 'Upcoming',
+    '/year': 'Year',
+    '/bills': 'Bills',
+    '/debt': 'Debt',
+    '/subscriptions': 'Recurring audit',
+    '/import': 'Bank import',
+    '/settings': 'Settings',
+  }
+  const title =
+    titles[pathname] ??
+    (pathname.startsWith('/settings') ? 'Settings' : pathname.replace(/^\//, ''))
+  let sub: string | null = null
+  if (paySettings && period && pathname !== '/settings') {
+    sub = `${format(period.intervalStart, 'MMM d')} – ${format(payPeriodInclusiveLastDay(period), 'MMM d')}`
+  }
+  return (
+    <p className="mb-1.5 truncate px-1 text-center text-[11px] leading-tight text-slate-500 dark:text-slate-500 lg:hidden">
+      <span className="font-semibold text-slate-700 dark:text-slate-300">{title}</span>
+      {sub ? (
+        <>
+          {' '}
+          <span className="text-slate-400 dark:text-slate-500">·</span> pay period {sub}
+        </>
+      ) : null}
+    </p>
+  )
+}
+
 export function Layout() {
   const location = useLocation()
   const theme = useFinanceStore((s) => s.preferences.theme)
   const setPreferences = useFinanceStore((s) => s.setPreferences)
+  const { standing } = useCadenceHealth()
 
   const [toolsOpen, setToolsOpen] = useState(false)
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
@@ -228,6 +294,22 @@ export function Layout() {
               Debt
             </NavLink>
             <NavLink
+              to="/subscriptions"
+              role="menuitem"
+              className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
+              onClick={() => setToolsOpen(false)}
+            >
+              Recurring audit
+            </NavLink>
+            <NavLink
+              to="/import"
+              role="menuitem"
+              className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
+              onClick={() => setToolsOpen(false)}
+            >
+              Bank import
+            </NavLink>
+            <NavLink
               to="/settings#alerts"
               role="menuitem"
               className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
@@ -262,6 +344,7 @@ export function Layout() {
       : null
 
   return (
+    <UndoToastProvider>
     <div className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden bg-[#f4f6f8] dark:bg-zinc-950 lg:flex-row">
       <div
         className="pointer-events-none fixed inset-0 -z-10 bg-[#f4f6f8] dark:bg-zinc-950"
@@ -274,10 +357,13 @@ export function Layout() {
 
       <ThemeSync />
       <GlobalExperience />
+      <HydrationRibbon />
+      <KeyboardShortcuts />
+      <ScrollRestoration />
 
       {/* Monarch-style desktop sidebar */}
       <aside className="relative z-50 hidden w-56 shrink-0 flex-col border-r border-slate-200/90 bg-white pt-[max(0.75rem,env(safe-area-inset-top))] dark:border-white/[0.08] dark:bg-zinc-900 lg:flex">
-        <div className="flex flex-col gap-1 px-3 pb-2">
+        <div className="flex flex-col gap-2 px-3 pb-2">
           <Link
             to="/"
             className="rounded-lg px-2 py-2 text-left transition hover:bg-slate-100 dark:hover:bg-white/[0.06]"
@@ -289,6 +375,10 @@ export function Layout() {
               Budget
             </span>
           </Link>
+          <CashflowStandingBadge standing={standing} className="w-full justify-center text-center" />
+          <p className="text-center text-[0.65rem] leading-snug text-slate-400 dark:text-slate-500">
+            Press <kbd className="rounded border border-slate-300 px-0.5 font-mono dark:border-slate-600">?</kbd> for shortcuts
+          </p>
         </div>
 
         <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3" aria-label="Main navigation">
@@ -319,6 +409,17 @@ export function Layout() {
           <NavLink to="/debt" className={() => sidebarNavClass(location.pathname === '/debt')}>
             <IconScale />
             Debt
+          </NavLink>
+          <NavLink
+            to="/subscriptions"
+            className={() => sidebarNavClass(location.pathname === '/subscriptions')}
+          >
+            <IconRepeat />
+            Recurring audit
+          </NavLink>
+          <NavLink to="/import" className={() => sidebarNavClass(location.pathname === '/import')}>
+            <IconArrowUpTray />
+            Bank import
           </NavLink>
 
           <div className="flex-1 min-h-2" aria-hidden />
@@ -360,6 +461,7 @@ export function Layout() {
         <header className="relative z-50 isolate print:hidden shrink-0 border-b border-slate-200/80 bg-white px-3 pb-2 pt-[max(0.35rem,env(safe-area-inset-top))] shadow-sm shadow-slate-900/[0.03] dark:border-white/[0.08] dark:bg-zinc-900 lg:hidden sm:px-4 sm:pb-2.5 sm:pt-[max(0.5rem,env(safe-area-inset-top))]">
           <div className="mx-auto w-full max-w-3xl">
             <h1 className="sr-only">Cadence budget</h1>
+            <MobileRouteContext />
             <nav
               className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg bg-slate-100/95 px-1 py-0.5 dark:bg-black/25 sm:rounded-xl sm:px-1.5 sm:py-1"
               aria-label="Main navigation"
@@ -408,15 +510,36 @@ export function Layout() {
                 </Link>
               </div>
             </nav>
+            <div className="mt-2 flex flex-col items-center gap-1 px-1">
+              <CashflowStandingBadge standing={standing} />
+              <p className="text-center text-[0.65rem] text-slate-400 dark:text-slate-500">
+                <kbd className="rounded border border-slate-300 px-0.5 font-mono dark:border-slate-600">?</kbd> shortcuts
+              </p>
+            </div>
           </div>
         </header>
 
         {toolsMenu}
 
-        <main className="relative z-0 mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto overscroll-y-contain px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 sm:pb-6 sm:pt-3 lg:max-w-5xl lg:px-8 lg:pb-8 lg:pt-6 print:max-w-none print:h-auto print:overflow-visible print:pb-4">
+        <a
+          href="#app-main"
+          className="fixed left-4 top-[max(0.5rem,env(safe-area-inset-top))] z-[600] -translate-y-[220%] rounded-lg bg-white px-3 py-2 text-sm font-semibold text-emerald-800 shadow-lg ring-2 ring-emerald-500 transition-transform focus:translate-y-0 focus:outline-none dark:bg-zinc-900 dark:text-emerald-200 print:hidden"
+          onClick={(e) => {
+            e.preventDefault()
+            document.getElementById('app-main')?.focus()
+          }}
+        >
+          Skip to content
+        </a>
+        <main
+          id="app-main"
+          tabIndex={-1}
+          className="relative z-0 mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto overscroll-y-contain px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 outline-none sm:px-4 sm:pb-6 sm:pt-3 lg:max-w-5xl lg:px-8 lg:pb-8 lg:pt-6 print:max-w-none print:h-auto print:overflow-visible print:pb-4"
+        >
           <Outlet />
         </main>
       </div>
     </div>
+    </UndoToastProvider>
   )
 }

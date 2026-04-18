@@ -65,6 +65,17 @@ export function SettingsPage() {
   } | null>(null)
   const exportBannerClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
+  const addSavingsAccountTransfer = useFinanceStore((s) => s.addSavingsAccountTransfer)
+  const removeSavingsAccountTransfer = useFinanceStore(
+    (s) => s.removeSavingsAccountTransfer,
+  )
+
+  const [txDate, setTxDate] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [txAmount, setTxAmount] = useState('')
+  const [txDir, setTxDir] = useState<'to_savings' | 'from_savings'>('to_savings')
+  const [txNote, setTxNote] = useState('')
+
   const showExportBanner = (kind: 'success' | 'error', message: string) => {
     if (exportBannerClearTimer.current) {
       window.clearTimeout(exportBannerClearTimer.current)
@@ -95,6 +106,17 @@ export function SettingsPage() {
       })
     }, 100)
     return () => window.clearTimeout(t)
+  }, [location.hash, location.pathname])
+
+  useEffect(() => {
+    if (location.hash !== '#savings-account') return
+    const timer = window.setTimeout(() => {
+      document.getElementById('savings-account')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 100)
+    return () => window.clearTimeout(timer)
   }, [location.hash, location.pathname])
 
   useEffect(() => {
@@ -150,6 +172,12 @@ export function SettingsPage() {
         ? String(fundsDateRaw).trim()
         : null
 
+    const savDateRaw = fd.get('savingsBalanceDate')
+    const savingsBalanceDate =
+      savDateRaw !== null && String(savDateRaw).trim() !== ''
+        ? String(savDateRaw).trim()
+        : null
+
     const next: PaySettings = {
       frequency,
       anchorPayDate,
@@ -168,6 +196,8 @@ export function SettingsPage() {
       incomeSecondPaycheck: parseOptNum('incomeSecondPaycheck'),
       startingFundsDate,
       startingFundsAmount: parseOptNum('startingFundsAmount'),
+      savingsBalanceDate,
+      savingsBalanceAmount: parseOptNum('savingsBalanceAmount'),
       currencyCode: String(fd.get('currencyCode') || 'USD').trim() || 'USD',
       locale: String(fd.get('locale') || '').trim() || undefined,
     }
@@ -200,6 +230,7 @@ export function SettingsPage() {
           envelopeTransfers: s.envelopeTransfers,
           periodNotes: s.periodNotes,
           quickExpenseTemplates: s.quickExpenseTemplates,
+          savingsAccountTransfers: s.savingsAccountTransfers,
         })
         const name = `finance-backup-${format(new Date(), 'yyyy-MM-dd')}.json`
         await downloadJson(name, payload)
@@ -235,19 +266,23 @@ export function SettingsPage() {
       try {
         const s = useFinanceStore.getState()
         const exportedAt = new Date().toISOString()
-        const csv = buildFinanceCsv({
-          paySettings: s.paySettings,
-          bills: s.bills,
-          envelopes: s.envelopes,
-          oneOffItems: s.oneOffItems,
-          expenseEntries: s.expenseEntries,
-          incomeLines: s.incomeLines,
-          periodBudgets: s.periodBudgets,
-          savingsGoals: s.savingsGoals,
-          envelopeTransfers: s.envelopeTransfers,
-          periodNotes: s.periodNotes,
-          quickExpenseTemplates: s.quickExpenseTemplates,
-        })
+        const preset = s.preferences.csvExportPreset ?? 'full'
+        const csv = buildFinanceCsv(
+          {
+            paySettings: s.paySettings,
+            bills: s.bills,
+            envelopes: s.envelopes,
+            oneOffItems: s.oneOffItems,
+            expenseEntries: s.expenseEntries,
+            incomeLines: s.incomeLines,
+            periodBudgets: s.periodBudgets,
+            savingsGoals: s.savingsGoals,
+            envelopeTransfers: s.envelopeTransfers,
+            periodNotes: s.periodNotes,
+            quickExpenseTemplates: s.quickExpenseTemplates,
+          },
+          preset,
+        )
         const name = `finance-export-${format(new Date(), 'yyyy-MM-dd')}.csv`
         await downloadCsv(name, csv)
         setLastExportAt(exportedAt)
@@ -333,6 +368,12 @@ export function SettingsPage() {
     return ''
   })()
 
+  const savingsBalanceDateDefault = paySettings?.savingsBalanceDate ?? ''
+  const savingsBalanceAmountDefault =
+    typeof paySettings?.savingsBalanceAmount === 'number'
+      ? String(paySettings.savingsBalanceAmount)
+      : ''
+
   const tw = paySettings?.frequency === 'twice_monthly'
 
   return (
@@ -355,6 +396,8 @@ export function SettingsPage() {
           String(paySettings?.incomePerPaycheck ?? ''),
           paySettings?.startingFundsDate ?? '',
           String(paySettings?.startingFundsAmount ?? ''),
+          paySettings?.savingsBalanceDate ?? '',
+          String(paySettings?.savingsBalanceAmount ?? ''),
           bills.map((b) => b.id).join(','),
         ].join('|')}
         onSubmit={onSubmit}
@@ -538,10 +581,153 @@ export function SettingsPage() {
           </div>
         </div>
 
+        <div className="rounded-xl border border-violet-200/70 bg-violet-50/50 p-4 dark:border-violet-900/40 dark:bg-violet-950/25">
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+            Savings account (optional)
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+            Balance at the <span className="font-medium">end of the as-of day</span>. Log transfers in the
+            next card — money moved to savings reduces your projected checking balance.
+          </p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Savings — as-of date
+              </span>
+              <input
+                type="date"
+                name="savingsBalanceDate"
+                defaultValue={savingsBalanceDateDefault}
+                className="input-field mt-1 w-full"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Savings — balance
+              </span>
+              <input
+                type="number"
+                name="savingsBalanceAmount"
+                step="0.01"
+                placeholder="Optional"
+                defaultValue={savingsBalanceAmountDefault}
+                className="input-field mt-1 w-full"
+              />
+            </label>
+          </div>
+        </div>
+
         <button type="submit" className="btn-primary w-full sm:w-auto">
           Save
         </button>
       </form>
+
+      <div id="savings-account" className="card scroll-mt-20">
+        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+          Checking ↔ savings transfers
+        </h3>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+          <span className="font-medium text-slate-700 dark:text-slate-300">To savings</span> moves cash out
+          of checking; <span className="font-medium text-slate-700 dark:text-slate-300">From savings</span>{' '}
+          moves it back. Set your savings baseline in the pay schedule form above.
+        </p>
+        <div className="mt-4 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Date
+            <input
+              type="date"
+              value={txDate}
+              onChange={(e) => setTxDate(e.target.value)}
+              className="input-field !py-2 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Amount
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={txAmount}
+              onChange={(e) => setTxAmount(e.target.value)}
+              placeholder="0"
+              className="input-field w-28 !py-2 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Direction
+            <select
+              value={txDir}
+              onChange={(e) =>
+                setTxDir(e.target.value as 'to_savings' | 'from_savings')
+              }
+              className="select-field !py-2 text-sm"
+            >
+              <option value="to_savings">To savings</option>
+              <option value="from_savings">From savings</option>
+            </select>
+          </label>
+          <label className="flex min-w-[8rem] flex-1 flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Note (optional)
+            <input
+              value={txNote}
+              onChange={(e) => setTxNote(e.target.value)}
+              className="input-field !py-2 text-sm"
+            />
+          </label>
+          <button
+            type="button"
+            className="btn-solid self-end"
+            onClick={() => {
+              const amt = Number(txAmount)
+              if (!txDate.trim() || !Number.isFinite(amt) || amt <= 0) return
+              addSavingsAccountTransfer({
+                date: txDate.trim(),
+                amount: amt,
+                direction: txDir,
+                note: txNote.trim() || undefined,
+              })
+              setTxAmount('')
+              setTxNote('')
+            }}
+          >
+            Add transfer
+          </button>
+        </div>
+        {savingsAccountTransfers.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">No transfers yet.</p>
+        ) : (
+          <ul className="mt-4 space-y-2 text-sm">
+            {[...savingsAccountTransfers]
+              .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id))
+              .map((t) => (
+                <li
+                  key={t.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-800"
+                >
+                  <span className="text-slate-700 dark:text-slate-300">
+                    {t.date}{' '}
+                    <span className="font-medium">
+                      {t.direction === 'to_savings' ? '→ Savings' : '← From savings'}
+                    </span>
+                    {t.note ? (
+                      <span className="text-slate-500"> — {t.note}</span>
+                    ) : null}
+                  </span>
+                  <span className="flex items-center gap-2 tabular-nums">
+                    {formatMoney(t.amount, paySettings)}
+                    <button
+                      type="button"
+                      className="text-xs text-red-600 dark:text-red-400"
+                      onClick={() => removeSavingsAccountTransfer(t.id)}
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </li>
+              ))}
+          </ul>
+        )}
+      </div>
 
       <div className="card">
         <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
@@ -939,7 +1125,7 @@ export function SettingsPage() {
           />
         </label>
         <label className="mt-4 block text-xs font-medium text-slate-500 dark:text-slate-400">
-          Default Summary window
+          Default Summary view
           <select
             value={preferences.summaryViewMode ?? 'pay_period'}
             onChange={(e) =>
@@ -1112,6 +1298,23 @@ export function SettingsPage() {
             </button>
           </div>
         ) : null}
+        <label className="mt-4 block max-w-md text-xs font-medium text-slate-600 dark:text-slate-400">
+          CSV spreadsheet columns
+          <select
+            value={preferences.csvExportPreset ?? 'full'}
+            onChange={(e) =>
+              setPreferences({
+                csvExportPreset: e.target.value as 'full' | 'minimal',
+              })
+            }
+            className="select-field mt-1 w-full max-w-xs text-sm"
+          >
+            <option value="full">Full — budgets, goals, transfers, notes, templates</option>
+            <option value="minimal">
+              Minimal — pay settings, bills, one-offs, expenses, income, envelopes
+            </option>
+          </select>
+        </label>
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"

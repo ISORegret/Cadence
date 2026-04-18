@@ -1,4 +1,4 @@
-import { addDays, parseISO } from 'date-fns'
+import { addDays } from 'date-fns'
 import type {
   Bill,
   ExpenseEntry,
@@ -6,6 +6,7 @@ import type {
   OneOffItem,
   Outflow,
   PaySettings,
+  SavingsAccountTransfer,
 } from '../types'
 import type { CurrentPayPeriod } from './payPeriod'
 import {
@@ -16,6 +17,10 @@ import {
   toISODate,
 } from './payPeriod'
 import { projectedBalanceEndOfDay } from './cashProjection'
+import {
+  savingsTransfersInPayPeriod,
+  savingsTransfersToOutflows,
+} from './savingsAccount'
 
 export type StartingFundsLegacyPrefs = {
   bankBalanceAnchorDate?: string | null
@@ -79,6 +84,7 @@ export function periodRunningRowsFromStartingFunds(options: {
   expenseEntries: ExpenseEntry[]
   incomeLines: IncomeLine[]
   legacyPreferences?: StartingFundsLegacyPrefs
+  savingsAccountTransfers?: SavingsAccountTransfer[]
 }): { o: Outflow; balanceAfter: number }[] | null {
   const {
     paySettings,
@@ -88,6 +94,7 @@ export function periodRunningRowsFromStartingFunds(options: {
     expenseEntries,
     incomeLines,
     legacyPreferences,
+    savingsAccountTransfers = [],
   } = options
   const { date: anchorDate, amount: anchorAmount } = getStartingFunds(
     paySettings,
@@ -125,24 +132,35 @@ export function periodRunningRowsFromStartingFunds(options: {
         a.date.localeCompare(b.date) || a.name.localeCompare(b.name),
     )
 
-  if (sorted.length === 0) return []
-
-  const dayBeforeFirst = toISODate(addDays(parseISO(sorted[0].date), -1))
-  let bal = projectedBalanceEndOfDay(
-    anchorDate,
-    anchorAmount,
-    dayBeforeFirst,
-    paySettings,
-    bills,
-    oneOffItems,
-    expenseEntries,
-    incomeLines,
+  const txOutflows = savingsTransfersToOutflows(
+    savingsTransfersInPayPeriod(
+      savingsAccountTransfers,
+      period,
+      anchorDate,
+    ),
   )
 
-  return sorted.map((o) => {
-    bal -= o.amount
-    return { o, balanceAfter: bal }
-  })
+  const merged = [...sorted, ...txOutflows].sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) || a.name.localeCompare(b.name),
+  )
+
+  if (merged.length === 0) return []
+
+  return merged.map((o) => ({
+    o,
+    balanceAfter: projectedBalanceEndOfDay(
+      anchorDate,
+      anchorAmount,
+      o.date,
+      paySettings,
+      bills,
+      oneOffItems,
+      expenseEntries,
+      incomeLines,
+      savingsAccountTransfers,
+    ),
+  }))
 }
 
 /** Lowest projected balance in the period (after starting funds), for alerts. */
@@ -154,6 +172,7 @@ export function minProjectedBalanceAfterFromStartingFunds(options: {
   expenseEntries: ExpenseEntry[]
   incomeLines: IncomeLine[]
   legacyPreferences?: StartingFundsLegacyPrefs
+  savingsAccountTransfers?: SavingsAccountTransfer[]
 }): number | null {
   const {
     paySettings,
@@ -163,6 +182,7 @@ export function minProjectedBalanceAfterFromStartingFunds(options: {
     expenseEntries,
     incomeLines,
     legacyPreferences,
+    savingsAccountTransfers = [],
   } = options
   if (!hasStartingFunds(paySettings, legacyPreferences)) return null
   const { date: ad, amount: am } = getStartingFunds(paySettings, legacyPreferences)
@@ -180,18 +200,56 @@ export function minProjectedBalanceAfterFromStartingFunds(options: {
     oneOffItems,
     expenseEntries,
     incomeLines,
+    savingsAccountTransfers,
   )
 
-  const rows = periodRunningRowsFromStartingFunds({
-    paySettings,
-    period,
-    bills,
-    oneOffItems,
-    expenseEntries,
-    incomeLines,
-    legacyPreferences,
-  })
-  if (rows === null) return null
-  if (rows.length === 0) return endBal
-  return Math.min(...rows.map((r) => r.balanceAfter), endBal)
+  const periodStartIso = toISODate(period.intervalStart)
+  const periodEndExIso = toISODate(period.intervalEndExclusive)
+
+  const checkpointDates = new Set<string>()
+  checkpointDates.add(lastDayInPeriod)
+
+  for (const o of mergeAllOutflowLists([
+    listOutflowsInRange(
+      bills,
+      period.intervalStart,
+      period.intervalEndExclusive,
+    ),
+    listOneOffOutflowsInRange(
+      oneOffItems,
+      period.intervalStart,
+      period.intervalEndExclusive,
+    ),
+    listExpenseOutflowsInRange(
+      expenseEntries,
+      period.intervalStart,
+      period.intervalEndExclusive,
+    ),
+  ])) {
+    if (o.date > ad && o.date >= periodStartIso && o.date < periodEndExIso) {
+      checkpointDates.add(o.date)
+    }
+  }
+  for (const t of savingsAccountTransfers) {
+    if (t.date > ad && t.date >= periodStartIso && t.date < periodEndExIso) {
+      checkpointDates.add(t.date)
+    }
+  }
+
+  let min = endBal
+  for (const iso of checkpointDates) {
+    const b = projectedBalanceEndOfDay(
+      ad,
+      am,
+      iso,
+      paySettings,
+      bills,
+      oneOffItems,
+      expenseEntries,
+      incomeLines,
+      savingsAccountTransfers,
+    )
+    if (b < min) min = b
+  }
+  return min
 }

@@ -23,19 +23,22 @@ function row(cells: (string | number)[]): string {
   return cells.map((c) => esc(String(c))).join(',')
 }
 
-export function buildFinanceCsv(payload: {
-  paySettings: PaySettings | null
-  bills: Bill[]
-  envelopes: Envelope[]
-  oneOffItems: OneOffItem[]
-  expenseEntries: ExpenseEntry[]
-  incomeLines: IncomeLine[]
-  periodBudgets: PeriodBudgetRow[]
-  savingsGoals: SavingsGoal[]
-  envelopeTransfers: EnvelopeTransfer[]
-  periodNotes: PeriodNote[]
-  quickExpenseTemplates: QuickExpenseTemplate[]
-}): string {
+export function buildFinanceCsv(
+  payload: {
+    paySettings: PaySettings | null
+    bills: Bill[]
+    envelopes: Envelope[]
+    oneOffItems: OneOffItem[]
+    expenseEntries: ExpenseEntry[]
+    incomeLines: IncomeLine[]
+    periodBudgets: PeriodBudgetRow[]
+    savingsGoals: SavingsGoal[]
+    envelopeTransfers: EnvelopeTransfer[]
+    periodNotes: PeriodNote[]
+    quickExpenseTemplates: QuickExpenseTemplate[]
+  },
+  preset: 'full' | 'minimal' = 'full',
+): string {
   const lines: string[] = []
 
   lines.push('SECTION,pay_settings')
@@ -108,64 +111,66 @@ export function buildFinanceCsv(payload: {
     lines.push(row([e.id, e.name]))
   }
 
-  lines.push('SECTION,period_budgets')
-  lines.push(
-    row([
-      'periodStart',
-      'periodEndExclusive',
-      'targetType',
-      'targetKey',
-      'budgeted',
-    ]),
-  )
-  for (const p of payload.periodBudgets) {
+  if (preset === 'full') {
+    lines.push('SECTION,period_budgets')
     lines.push(
       row([
-        p.periodStart,
-        p.periodEndExclusive,
-        p.targetType,
-        p.targetKey,
-        p.budgeted,
+        'periodStart',
+        'periodEndExclusive',
+        'targetType',
+        'targetKey',
+        'budgeted',
       ]),
     )
-  }
+    for (const p of payload.periodBudgets) {
+      lines.push(
+        row([
+          p.periodStart,
+          p.periodEndExclusive,
+          p.targetType,
+          p.targetKey,
+          p.budgeted,
+        ]),
+      )
+    }
 
-  lines.push('SECTION,savings_goals')
-  lines.push(row(['name', 'targetAmount', 'savedAmount', 'targetDate']))
-  for (const g of payload.savingsGoals) {
+    lines.push('SECTION,savings_goals')
+    lines.push(row(['name', 'targetAmount', 'savedAmount', 'targetDate']))
+    for (const g of payload.savingsGoals) {
+      lines.push(
+        row([g.name, g.targetAmount, g.savedAmount, g.targetDate ?? '']),
+      )
+    }
+
+    lines.push('SECTION,envelope_transfers')
     lines.push(
-      row([g.name, g.targetAmount, g.savedAmount, g.targetDate ?? '']),
+      row(['date', 'amount', 'fromEnvelopeId', 'toEnvelopeId', 'note']),
     )
-  }
+    for (const t of payload.envelopeTransfers) {
+      lines.push(
+        row([
+          t.date,
+          t.amount,
+          t.fromEnvelopeId,
+          t.toEnvelopeId,
+          t.note ?? '',
+        ]),
+      )
+    }
 
-  lines.push('SECTION,envelope_transfers')
-  lines.push(
-    row(['date', 'amount', 'fromEnvelopeId', 'toEnvelopeId', 'note']),
-  )
-  for (const t of payload.envelopeTransfers) {
-    lines.push(
-      row([
-        t.date,
-        t.amount,
-        t.fromEnvelopeId,
-        t.toEnvelopeId,
-        t.note ?? '',
-      ]),
-    )
-  }
+    lines.push('SECTION,period_notes')
+    lines.push(row(['periodStart', 'periodEndExclusive', 'body']))
+    for (const n of payload.periodNotes) {
+      lines.push(row([n.periodStart, n.periodEndExclusive, n.body]))
+    }
 
-  lines.push('SECTION,period_notes')
-  lines.push(row(['periodStart', 'periodEndExclusive', 'body']))
-  for (const n of payload.periodNotes) {
-    lines.push(row([n.periodStart, n.periodEndExclusive, n.body]))
-  }
-
-  lines.push('SECTION,quick_expense_templates')
-  lines.push(row(['label', 'amount', 'category', 'envelopeId']))
-  for (const q of payload.quickExpenseTemplates) {
-    lines.push(
-      row([q.label, q.amount, q.category ?? '', q.envelopeId ?? '']),
-    )
+    lines.push('SECTION,quick_expense_templates')
+    lines.push(row(['label', 'amount', 'category', 'envelopeId']))
+    for (const q of payload.quickExpenseTemplates) {
+      lines.push(
+        row([q.label, q.amount, q.category ?? '', q.envelopeId ?? '']),
+      )
+    }
   }
 
   return lines.join('\n')
