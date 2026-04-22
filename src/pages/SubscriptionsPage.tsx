@@ -41,7 +41,8 @@ export function SubscriptionsPage() {
     .sort((a, b) => (b.monthlyEq ?? 0) - (a.monthlyEq ?? 0))
 
   const oneTimeBills = bills.filter((b) => b.schedule.kind === 'once')
-  const recurringBaseTotal = recurringRows.reduce((s, x) => s + x.bill.amount, 0)
+  const recurringMonthlyEqTotal = recurringRows.reduce((s, x) => s + (x.monthlyEq ?? 0), 0)
+  const recurringAnnualEqTotal = recurringMonthlyEqTotal * 12
 
   return (
     <div className="space-y-6 text-left print:max-w-none">
@@ -60,21 +61,21 @@ export function SubscriptionsPage() {
         </p>
       </div>
 
-      <div className="card grid grid-cols-2 gap-3 sm:grid-cols-2">
+      <div className="card grid grid-cols-2 gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Recurring bill count
+            Monthly total
           </p>
           <p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-white sm:text-2xl">
-            {recurringRows.length}
+            {money(recurringMonthlyEqTotal)}
           </p>
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Sum of recurring base amounts
+            Yearly total
           </p>
           <p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-white sm:text-2xl">
-            {money(recurringBaseTotal)}
+            {money(recurringAnnualEqTotal)}
           </p>
         </div>
       </div>
@@ -84,7 +85,7 @@ export function SubscriptionsPage() {
           Recurring bills
         </h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Each line shows the schedule plus monthly and yearly equivalents.
+          Each line shows monthly and yearly totals.
         </p>
         {recurringRows.length === 0 ? (
           <p className="mt-3 text-sm text-slate-500">
@@ -110,18 +111,24 @@ export function SubscriptionsPage() {
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Monthly
-                  </p>
-                  <p className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                    {money(monthlyEq ?? 0)}
-                  </p>
-                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Yearly
-                  </p>
-                  <p className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                    {money((monthlyEq ?? 0) * 12)}
-                  </p>
+                  <div className="grid grid-cols-2 gap-x-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Monthly
+                      </p>
+                      <p className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                        {money(monthlyEq ?? 0)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Yearly
+                      </p>
+                      <p className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                        {money((monthlyEq ?? 0) * 12)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </li>
             ))}
