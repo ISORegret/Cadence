@@ -63,6 +63,14 @@ function sanitizeBill(b: Bill): Bill {
   return x as unknown as Bill
 }
 
+function sanitizeSavingsTransfers(
+  xs: SavingsAccountTransfer[] | undefined,
+): SavingsAccountTransfer[] {
+  if (!Array.isArray(xs)) return []
+  // Remove the one-click test reset transfer if it exists.
+  return xs.filter((t) => (t.note ?? '').trim() !== 'Reset test bucket to $0')
+}
+
 type PersistSlice = {
   paySettings: PaySettings | null
   bills: Bill[]
@@ -113,6 +121,7 @@ function applySnapshot(json: string): PersistSlice {
     bills: Array.isArray(parsed.bills)
       ? parsed.bills.map(sanitizeBill)
       : emptyPersist().bills,
+    savingsAccountTransfers: sanitizeSavingsTransfers(parsed.savingsAccountTransfers),
   }
 }
 
@@ -246,7 +255,7 @@ export const useFinanceStore = create<FinanceState>()(
           envelopeTransfers: payload.envelopeTransfers ?? [],
           periodNotes: payload.periodNotes ?? [],
           quickExpenseTemplates: payload.quickExpenseTemplates ?? [],
-          savingsAccountTransfers: payload.savingsAccountTransfers ?? [],
+          savingsAccountTransfers: sanitizeSavingsTransfers(payload.savingsAccountTransfers),
           undoSnapshots: [],
         }),
 

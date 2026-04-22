@@ -58,6 +58,16 @@ export function SummaryPage() {
     return `${money(netBucketMoved)} (net moved)`
   }, [paySettings, projectedSavingsEndOfToday, money, netBucketMoved])
 
+  const totalFundsLabel = useMemo(() => {
+    if (projectedBalanceEndOfToday === null) return '—'
+    // When a real savings anchor exists we can show a true "checking + savings" total.
+    if (projectedSavingsEndOfToday !== null) {
+      return money(projectedBalanceEndOfToday + projectedSavingsEndOfToday)
+    }
+    // Without a savings anchor, the best we can do is "checking + net moved".
+    return `${money(projectedBalanceEndOfToday + netBucketMoved)} (approx.)`
+  }, [projectedBalanceEndOfToday, projectedSavingsEndOfToday, money, netBucketMoved])
+
   const {
     dueFromCashThisPeriod,
     dueFromBillBucketThisPeriod,
@@ -172,13 +182,17 @@ export function SummaryPage() {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="card">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Cash (estimate)
+            Checking (estimate)
           </p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
             {projectedBalanceEndOfToday !== null ? money(projectedBalanceEndOfToday) : '—'}
           </p>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Uses your Starting funds + scheduled paychecks/withdrawals through today.
+            Total funds (checking + bucket): <span className="tabular-nums">{totalFundsLabel}</span>
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Uses your Starting funds + scheduled paychecks/withdrawals through today. Transfers to the
+            bucket reduce checking.
           </p>
         </div>
 
@@ -293,35 +307,6 @@ export function SummaryPage() {
           <span className="font-semibold">Bucket balance:</span>{' '}
           <span className="tabular-nums">{billBucketBalanceLabel}</span>
         </p>
-        {netBucketMoved !== 0 ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="btn-secondary !min-h-0 !px-3 !py-1.5 text-xs"
-              onClick={() => {
-                const amt = Math.round(Math.abs(netBucketMoved) * 100) / 100
-                if (!Number.isFinite(amt) || amt <= 0) return
-                const ok = window.confirm(
-                  `Reset Bill bucket back to $0 by adding an offsetting transfer of ${money(
-                    amt,
-                  )} dated ${todayStr}?`,
-                )
-                if (!ok) return
-                addSavingsAccountTransfer({
-                  date: todayStr,
-                  amount: amt,
-                  direction: netBucketMoved > 0 ? 'from_savings' : 'to_savings',
-                  note: 'Reset test bucket to $0',
-                })
-              }}
-            >
-              Reset bucket to $0
-            </button>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">
-              Adds an offsetting transfer (keeps history).
-            </span>
-          </div>
-        ) : null}
         <form
           className="mt-3 flex flex-wrap gap-2"
           onSubmit={(e) => {
