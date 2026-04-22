@@ -49,14 +49,6 @@ function IconCog({ className = 'size-[1.05rem]' }: { className?: string }) {
   )
 }
 
-function IconLayoutGrid({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-    </svg>
-  )
-}
-
 function IconCalendar({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -73,26 +65,10 @@ function IconClock({ className = 'size-[1.15rem] shrink-0' }: { className?: stri
   )
 }
 
-function IconBarsYear({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path strokeLinecap="round" d="M4 19V5M8 19V9M12 19v-6M16 19v-3M20 19v-8" />
-    </svg>
-  )
-}
-
 function IconReceipt({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-    </svg>
-  )
-}
-
-function IconScale({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
     </svg>
   )
 }
@@ -105,26 +81,14 @@ function IconRepeat({ className = 'size-[1.15rem] shrink-0' }: { className?: str
   )
 }
 
-function IconArrowUpTray({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-    </svg>
-  )
-}
-
 const PRIMARY_NAV_ITEMS = [
-  { to: '/', label: 'Summary', icon: IconLayoutGrid },
-  { to: '/calendar', label: 'Calendar', icon: IconCalendar },
   { to: '/upcoming', label: 'Upcoming', icon: IconClock },
+  { to: '/calendar', label: 'Calendar', icon: IconCalendar },
+  { to: '/subscriptions', label: 'Recurring audit', icon: IconRepeat },
 ] as const
 
 const TOOL_NAV_ITEMS = [
-  { to: '/year', label: 'Year', icon: IconBarsYear },
   { to: '/bills', label: 'Bills', icon: IconReceipt },
-  { to: '/debt', label: 'Debt', icon: IconScale },
-  { to: '/subscriptions', label: 'Recurring audit', icon: IconRepeat },
-  { to: '/import', label: 'Bank import', icon: IconArrowUpTray },
 ] as const
 
 const ROUTE_TITLE_LOOKUP = new Map<string, string>([
@@ -173,10 +137,13 @@ function ThemeField({
 function MobileRouteContext() {
   const { pathname } = useLocation()
   const { period, paySettings } = useCadenceHealth()
-  if (pathname === '/') return null
   const title =
     ROUTE_TITLE_LOOKUP.get(pathname) ??
-    (pathname.startsWith('/settings') ? 'Settings' : pathname.replace(/^\//, ''))
+    (pathname === '/'
+      ? 'Upcoming'
+      : pathname.startsWith('/settings')
+        ? 'Settings'
+        : pathname.replace(/^\//, ''))
   let sub: string | null = null
   if (paySettings && period && pathname !== '/settings') {
     sub = `${format(period.intervalStart, 'MMM d')} – ${format(payPeriodInclusiveLastDay(period), 'MMM d')}`
@@ -347,8 +314,7 @@ export function Layout() {
             <NavLink
               key={to}
               to={to}
-              end={to === '/'}
-              className={() => sidebarNavClass(pathname === to)}
+              className={() => sidebarNavClass(pathname === to || (to === '/upcoming' && pathname === '/'))}
             >
               <Icon />
               {label}
@@ -393,7 +359,11 @@ export function Layout() {
             >
               <div className="inline-flex min-h-0 min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-1 [&::-webkit-scrollbar]:hidden">
                 {PRIMARY_NAV_ITEMS.map(({ to, label }) => (
-                  <NavLink key={to} to={to} end={to === '/'} className={() => pill(pathname === to)}>
+                  <NavLink
+                    key={to}
+                    to={to}
+                    className={() => pill(pathname === to || (to === '/upcoming' && pathname === '/'))}
+                  >
                     {label}
                   </NavLink>
                 ))}

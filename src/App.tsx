@@ -8,7 +8,6 @@ import { CalendarPage } from './pages/CalendarPage'
 import { DebtTool } from './pages/DebtTool'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { Summary } from './pages/Summary'
 import { UpcomingPage } from './pages/UpcomingPage'
 import { YearPage } from './pages/YearPage'
 
@@ -49,7 +48,7 @@ export default function App() {
       <div className="flex min-h-0 flex-1 flex-col">
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<Summary />} />
+            <Route index element={<Navigate to="/upcoming" replace />} />
             {APP_ROUTES.map(({ path, render }) => (
               <Route key={path} path={path} element={render()} />
             ))}

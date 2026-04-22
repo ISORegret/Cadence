@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom'
 import { categoryChipClasses, categoryDotClass } from '../lib/categoryColors'
 import { formatMoney } from '../lib/money'
 import {
-  estimatedTakeHomeInRange,
   getPayPeriodAtOffset,
   payPeriodInclusiveLastDay,
   groupOutflowsByDate,
@@ -17,11 +16,6 @@ import {
   toISODate,
   totalAmount,
 } from '../lib/payPeriod'
-import {
-  projectedBalanceEndOfDay,
-  projectedFlowTotalsInclusiveRange,
-} from '../lib/cashProjection'
-import { getStartingFunds, hasStartingFunds } from '../lib/startingFunds'
 import type { Bill, ExpenseEntry, OneOffItem } from '../types'
 import { PageUndo } from '../components/PageUndo'
 import { useFinanceStore } from '../store/financeStore'
@@ -45,9 +39,6 @@ export function UpcomingPage() {
   const bills = useFinanceStore((s) => s.bills)
   const oneOffItems = useFinanceStore((s) => s.oneOffItems)
   const expenseEntries = useFinanceStore((s) => s.expenseEntries)
-  const incomeLines = useFinanceStore((s) => s.incomeLines)
-  const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
-  const preferences = useFinanceStore((s) => s.preferences)
 
   const [periodOffset, setPeriodOffset] = useState(0)
 
@@ -55,16 +46,6 @@ export function UpcomingPage() {
     if (!paySettings) return null
     return getPayPeriodAtOffset(new Date(), paySettings, periodOffset)
   }, [paySettings, periodOffset])
-
-  const periodLastDayIso = useMemo(() => {
-    if (!period) return ''
-    return toISODate(addDays(period.intervalEndExclusive, -1))
-  }, [period])
-
-  const dayBeforePeriodStartIso = useMemo(() => {
-    if (!period) return ''
-    return toISODate(addDays(period.intervalStart, -1))
-  }, [period])
 
   const labelRange = useMemo(() => {
     if (!period) return ''
@@ -87,7 +68,7 @@ export function UpcomingPage() {
   const periodTotal = totalAmount(outflows)
 
   const paydaysInPeriod = useMemo(() => {
-    if (!paySettings || !period) return [] as string[]
+    if (!paySettings || !period) return []
     return [
       ...listPaydayDatesInOpenRange(
         period.intervalStart,
@@ -97,188 +78,37 @@ export function UpcomingPage() {
     ].sort((a, b) => a.localeCompare(b))
   }, [paySettings, period])
 
-  const takeHome = useMemo(() => {
-    if (!paySettings || !period) return null
-    return estimatedTakeHomeInRange(
-      period.intervalStart,
-      period.intervalEndExclusive,
-      paySettings,
-      incomeLines,
-    )
-  }, [paySettings, incomeLines, period])
-
-  const periodIncome = takeHome?.total ?? 0
-  const periodNet = periodIncome - periodTotal
-
-  const { date: anchorDateSaved, amount: anchorAmountSaved } = getStartingFunds(
-    paySettings,
-    preferences,
-  )
-
-  const projectedEndOfPeriod = useMemo(() => {
-    if (
-      !paySettings ||
-      !period ||
-      !periodLastDayIso ||
-      anchorDateSaved == null ||
-      anchorAmountSaved == null ||
-      Number.isNaN(anchorAmountSaved)
-    ) {
-      return null
+  const primaryPayAmount =
+    typeof paySettings?.incomePerPaycheck === 'number' ? paySettings.incomePerPaycheck : 0
+  const periodIncome = paydaysInPeriod.length * primaryPayAmount
+  const rolloverBalance = useMemo(() => {
+    if (!period || !paySettings) return 0
+    if (periodOffset <= 0) return 0
+    let total = 0
+    for (let offset = 0; offset < periodOffset; offset += 1) {
+      const p = getPayPeriodAtOffset(new Date(), paySettings, offset)
+      const flows = mergedOutflowsForRange(
+        p.intervalStart,
+        p.intervalEndExclusive,
+        bills,
+        oneOffItems,
+        expenseEntries,
+      )
+      const due = totalAmount(flows)
+      const payCount = [
+        ...listPaydayDatesInOpenRange(
+        p.intervalStart,
+        p.intervalEndExclusive,
+        paySettings,
+        ),
+      ].length
+      total += payCount * primaryPayAmount - due
     }
-    if (anchorDateSaved > periodLastDayIso) {
-      return { kind: 'anchor_after_period' as const }
-    }
-    const balance = projectedBalanceEndOfDay(
-      anchorDateSaved,
-      anchorAmountSaved,
-      periodLastDayIso,
-      paySettings,
-      bills,
-      oneOffItems,
-      expenseEntries,
-      incomeLines,
-      savingsAccountTransfers,
-    )
-    return { kind: 'ok' as const, balance }
-  }, [
-    paySettings,
-    period,
-    periodLastDayIso,
-    anchorDateSaved,
-    anchorAmountSaved,
-    bills,
-    oneOffItems,
-    expenseEntries,
-    incomeLines,
-    savingsAccountTransfers,
-  ])
+    return total
+  }, [period, paySettings, periodOffset, bills, oneOffItems, expenseEntries, primaryPayAmount])
 
-  const projectedStartOfPeriod = useMemo(() => {
-    if (
-      !paySettings ||
-      !period ||
-      !dayBeforePeriodStartIso ||
-      anchorDateSaved == null ||
-      anchorAmountSaved == null ||
-      Number.isNaN(anchorAmountSaved)
-    ) {
-      return null
-    }
-    if (anchorDateSaved > dayBeforePeriodStartIso) {
-      return null
-    }
-    const balance = projectedBalanceEndOfDay(
-      anchorDateSaved,
-      anchorAmountSaved,
-      dayBeforePeriodStartIso,
-      paySettings,
-      bills,
-      oneOffItems,
-      expenseEntries,
-      incomeLines,
-      savingsAccountTransfers,
-    )
-    return { balance, dayBeforeIso: dayBeforePeriodStartIso }
-  }, [
-    paySettings,
-    period,
-    dayBeforePeriodStartIso,
-    anchorDateSaved,
-    anchorAmountSaved,
-    bills,
-    oneOffItems,
-    expenseEntries,
-    incomeLines,
-    savingsAccountTransfers,
-  ])
-
-  /** Deposits − all scheduled lines + balance at end of day before this period (Settings path). */
-  const scheduledNetWithStartBalance = useMemo(() => {
-    if (!projectedStartOfPeriod) return null
-    return (
-      projectedStartOfPeriod.balance + periodIncome - periodTotal
-    )
-  }, [projectedStartOfPeriod, periodIncome, periodTotal])
-
-  const projectedPeriodChange = useMemo(() => {
-    if (!paySettings || projectedEndOfPeriod?.kind !== 'ok') return null
-    if (!hasStartingFunds(paySettings, preferences)) return null
-    const { date: ad, amount: am } = getStartingFunds(paySettings, preferences)
-    if (!ad || am == null || Number.isNaN(am)) return null
-    if (projectedStartOfPeriod) {
-      return projectedEndOfPeriod.balance - projectedStartOfPeriod.balance
-    }
-    const balanceEndOfAnchorDay = projectedBalanceEndOfDay(
-      ad,
-      am,
-      ad,
-      paySettings,
-      bills,
-      oneOffItems,
-      expenseEntries,
-      incomeLines,
-      savingsAccountTransfers,
-    )
-    return projectedEndOfPeriod.balance - balanceEndOfAnchorDay
-  }, [
-    paySettings,
-    preferences,
-    projectedEndOfPeriod,
-    projectedStartOfPeriod,
-    anchorDateSaved,
-    anchorAmountSaved,
-    bills,
-    oneOffItems,
-    expenseEntries,
-    incomeLines,
-    savingsAccountTransfers,
-  ])
-
-  /** Same calendar days that drive **Change this period** (matches projection walk). */
-  const projectedChangeFlowBreakdownRange = useMemo(() => {
-    if (!period || !periodLastDayIso || anchorDateSaved == null || !paySettings) {
-      return null
-    }
-    const ps = toISODate(period.intervalStart)
-    const pe = periodLastDayIso
-    if (projectedStartOfPeriod) {
-      return { start: ps, end: pe }
-    }
-    const dayAfterAnchor = toISODate(addDays(parseISO(anchorDateSaved), 1))
-    if (dayAfterAnchor > pe) return null
-    const start = dayAfterAnchor > ps ? dayAfterAnchor : ps
-    return { start, end: pe }
-  }, [
-    period,
-    periodLastDayIso,
-    anchorDateSaved,
-    projectedStartOfPeriod,
-    paySettings,
-  ])
-
-  const projectedChangeFlowBreakdown = useMemo(() => {
-    if (!paySettings || !projectedChangeFlowBreakdownRange) return null
-    const { start, end } = projectedChangeFlowBreakdownRange
-    return projectedFlowTotalsInclusiveRange(
-      start,
-      end,
-      paySettings,
-      bills,
-      oneOffItems,
-      expenseEntries,
-      incomeLines,
-      savingsAccountTransfers,
-    )
-  }, [
-    paySettings,
-    projectedChangeFlowBreakdownRange,
-    bills,
-    oneOffItems,
-    expenseEntries,
-    incomeLines,
-    savingsAccountTransfers,
-  ])
+  const availableThisPeriod = rolloverBalance + periodIncome
+  const endingRollover = availableThisPeriod - periodTotal
 
   const calendarDays = useMemo(() => {
     if (!period) return []
@@ -351,12 +181,12 @@ export function UpcomingPage() {
         </div>
       </div>
 
-      {paydaysInPeriod.length > 0 && takeHome ? (
+      {paydaysInPeriod.length > 0 ? (
         <div className="card-tight border border-emerald-200/80 bg-emerald-50/80 text-sm text-emerald-950 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-100">
-          <p className="font-semibold">Paycheck{takeHome.paydayCount > 1 ? 's' : ''} this period</p>
+          <p className="font-semibold">Paycheck{paydaysInPeriod.length > 1 ? 's' : ''} this period</p>
           <p className="mt-1 text-xs opacity-90">
             {paydaysInPeriod.map((iso) => format(parseISO(iso), 'EEE MMM d')).join(' · ')} —{' '}
-            estimated take-home {money(takeHome.total)}
+            using {money(primaryPayAmount)} per paycheck
           </p>
         </div>
       ) : null}
@@ -371,282 +201,42 @@ export function UpcomingPage() {
             in the title only.
           </p>
         ) : null}
-        {takeHome === null && periodTotal > 0 ? (
+        {paydaysInPeriod.length === 0 && periodTotal > 0 ? (
           <p className="mt-2 rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-xs leading-snug text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/35 dark:text-amber-100">
-            No paycheck dates fell in this pay period for your schedule, so income shows $0
-            while bills may still appear. Check your anchor pay date in{' '}
+            No paycheck dates fell in this pay period for your schedule, so this period uses $0 income
+            while due bills may still appear. Check your anchor pay date in{' '}
             <Link to="/settings" className="font-semibold underline">
               Settings
             </Link>
-            . Use projected balances below for dated cash flow.
+            .
           </p>
         ) : null}
 
-        <div className="mt-6 space-y-6">
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
-              Projected checking balance
-            </h4>
-            <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-              Uses the balance from Settings and walks forward day by day: take-home deposits minus
-              bills, one-offs, and expense log on their dates (same amounts as Scheduled outflows
-              below).
+        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+          <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Roll over from prior periods</p>
+            <p className={`mt-1 tabular-nums text-base font-semibold ${netClass(rolloverBalance)}`}>
+              {money(rolloverBalance)}
             </p>
-            <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-              <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50">
-                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Balance entering pay period
-                </dt>
-                <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">
-                  {projectedStartOfPeriod ? (
-                    <>
-                      <span className="tabular-nums text-base font-semibold">
-                        {money(projectedStartOfPeriod.balance)}
-                      </span>
-                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                        End of {format(parseISO(projectedStartOfPeriod.dayBeforeIso), 'EEE MMM d')}
-                      </p>
-                    </>
-                  ) : anchorDateSaved != null && anchorAmountSaved != null ? (
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      Set anchor on or before{' '}
-                      {format(parseISO(dayBeforePeriodStartIso), 'MMM d')}{' '}
-                      <span className="block pt-1 text-[11px]">
-                        End balance still calculates through {format(parseISO(periodLastDayIso), 'MMM d')}.
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      Add balance in{' '}
-                      <Link to="/settings" className="font-medium text-emerald-700 underline dark:text-emerald-400">
-                        Settings
-                      </Link>
-                      .
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div className="rounded-lg border border-emerald-200/90 bg-emerald-50/80 px-3 py-2.5 dark:border-emerald-800/50 dark:bg-emerald-950/35">
-                <dt className="text-xs font-medium text-emerald-900 dark:text-emerald-200">
-                  Pay period net (+ or −)
-                </dt>
-                <dd className="mt-1 text-slate-800 dark:text-slate-100">
-                  {projectedPeriodChange !== null ? (
-                    <>
-                      <span
-                        className={`tabular-nums text-base font-semibold ${netClass(projectedPeriodChange)}`}
-                      >
-                        {money(projectedPeriodChange)}
-                      </span>
-                      <p className="mt-1 text-[11px] leading-snug text-slate-600 dark:text-slate-400">
-                        {projectedStartOfPeriod
-                          ? `Through ${format(parseISO(periodLastDayIso), 'EEE MMM d')}.`
-                          : anchorDateSaved
-                            ? `From anchor ${format(parseISO(anchorDateSaved), 'MMM d')} through ${format(parseISO(periodLastDayIso), 'MMM d')}.`
-                            : null}
-                      </p>
-                      <p className="mt-2 text-[10px] leading-snug text-slate-500 dark:text-slate-500">
-                        Equals <span className="font-medium text-slate-600 dark:text-slate-400">end
-                        balance − start balance</span> for this pay period. Expand{' '}
-                        <span className="font-medium">Calendar check</span> below for deposits minus
-                        scheduled lines.
-                      </p>
-                      {projectedPeriodChange !== null && projectedChangeFlowBreakdown ? (
-                        <div className="mt-3 rounded-lg border border-emerald-200/80 bg-white/90 px-2.5 py-2 text-[11px] leading-snug text-slate-700 dark:border-emerald-900/40 dark:bg-zinc-900/60 dark:text-slate-200">
-                          <p className="font-semibold text-emerald-950 dark:text-emerald-100">
-                            What makes up this change
-                          </p>
-                          <ul className="mt-1.5 grid gap-1 tabular-nums">
-                            <li className="flex justify-between gap-3">
-                              <span>Paychecks &amp; income lines</span>
-                              <span className="text-emerald-800 dark:text-emerald-300">
-                                +{money(projectedChangeFlowBreakdown.income)}
-                              </span>
-                            </li>
-                            <li className="flex justify-between gap-3">
-                              <span>Bills, one-offs &amp; expenses</span>
-                              <span className="text-rose-800/90 dark:text-rose-300/90">
-                                −{money(projectedChangeFlowBreakdown.checkingScheduledOut)}
-                              </span>
-                            </li>
-                            {projectedChangeFlowBreakdown.toSavings > 0 ? (
-                              <li className="flex justify-between gap-3">
-                                <span>To savings</span>
-                                <span className="text-rose-800/90 dark:text-rose-300/90">
-                                  −{money(projectedChangeFlowBreakdown.toSavings)}
-                                </span>
-                              </li>
-                            ) : null}
-                            {projectedChangeFlowBreakdown.fromSavings > 0 ? (
-                              <li className="flex justify-between gap-3">
-                                <span>From savings</span>
-                                <span className="text-emerald-800 dark:text-emerald-300">
-                                  +{money(projectedChangeFlowBreakdown.fromSavings)}
-                                </span>
-                              </li>
-                            ) : null}
-                            <li className="mt-1 flex justify-between gap-3 border-t border-emerald-200/70 pt-1 font-medium text-slate-900 dark:text-slate-100 dark:border-emerald-800/50">
-                              <span>Net (income − out − to savings + from savings)</span>
-                              <span
-                                className={netClass(
-                                  projectedChangeFlowBreakdown.income -
-                                    projectedChangeFlowBreakdown.checkingScheduledOut -
-                                    projectedChangeFlowBreakdown.toSavings +
-                                    projectedChangeFlowBreakdown.fromSavings,
-                                )}
-                              >
-                                {money(
-                                  projectedChangeFlowBreakdown.income -
-                                    projectedChangeFlowBreakdown.checkingScheduledOut -
-                                    projectedChangeFlowBreakdown.toSavings +
-                                    projectedChangeFlowBreakdown.fromSavings,
-                                )}
-                              </span>
-                            </li>
-                          </ul>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : projectedEndOfPeriod?.kind === 'anchor_after_period' ? (
-                    <span className="text-xs text-slate-600 dark:text-slate-400">—</span>
-                  ) : (
-                    <span className="text-xs text-slate-600 dark:text-slate-400">
-                      Needs starting balance in{' '}
-                      <Link to="/settings" className="font-medium text-emerald-700 underline dark:text-emerald-400">
-                        Settings
-                      </Link>
-                      .
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div className="rounded-lg border border-emerald-200/90 bg-emerald-50/80 px-3 py-2.5 dark:border-emerald-800/50 dark:bg-emerald-950/35">
-                <dt className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Balance end of pay period
-                </dt>
-                <dd className="mt-1">
-                  {projectedEndOfPeriod?.kind === 'ok' ? (
-                    <>
-                      <span
-                        className={`tabular-nums text-lg font-bold ${
-                          projectedEndOfPeriod.balance >= 0
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-rose-600 dark:text-rose-400'
-                        }`}
-                      >
-                        {money(projectedEndOfPeriod.balance)}
-                      </span>
-                      {period ? (
-                        <p className="mt-1.5 text-[10px] leading-snug text-slate-600 dark:text-slate-400">
-                          End of{' '}
-                          {format(
-                            payPeriodInclusiveLastDay(period),
-                            'EEEE, MMMM d, yyyy',
-                          )}
-                          . Next payday: {format(period.nextPayday, 'EEEE, MMMM d, yyyy')}.
-                        </p>
-                      ) : null}
-                    </>
-                  ) : projectedEndOfPeriod?.kind === 'anchor_after_period' ? (
-                    <span className="text-xs text-slate-600 dark:text-slate-400">
-                      Anchor is after this period — try a later period or an earlier anchor.
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-600 dark:text-slate-400">
-                      Add balance in{' '}
-                      <Link to="/settings" className="font-medium text-emerald-700 underline dark:text-emerald-400">
-                        Settings
-                      </Link>
-                      .
-                    </span>
-                  )}
-                </dd>
-              </div>
-            </dl>
           </div>
-
-          <details className="rounded-lg border border-slate-200/90 bg-slate-50/40 dark:border-white/10 dark:bg-zinc-900/30">
-            <summary className="cursor-pointer select-none px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 marker:text-slate-500">
-              Calendar check
-            </summary>
-            <div className="border-t border-slate-200/80 px-3 pb-3 pt-2 dark:border-white/10">
-              <p className="text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-                Same dated amounts as projected checking above. May differ from{' '}
-                <span className="font-medium text-slate-600 dark:text-slate-300">
-                  Pay period net (+ or −)
-                </span>{' '}
-                when deposits and paydays don&apos;t align.
-              </p>
-              <div className="mt-3 space-y-3 text-sm">
-                <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white/90 dark:border-white/10 dark:bg-zinc-900/45">
-                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 gap-y-1 px-3 pt-3 pb-2 sm:gap-x-3 sm:px-4 sm:pt-4">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Deposits
-                      </p>
-                      <p className="mt-0.5 tabular-nums text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-                        {money(periodIncome)}
-                      </p>
-                    </div>
-                    <span
-                      className="select-none pb-1 text-lg font-light text-slate-300 dark:text-slate-600 sm:text-xl"
-                      aria-hidden
-                    >
-                      −
-                    </span>
-                    <div className="min-w-0 text-right">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Bills &amp; expenses
-                      </p>
-                      <p className="mt-0.5 tabular-nums text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-                        {money(periodTotal)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-slate-200/85 bg-slate-50/70 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-950/55 sm:px-4">
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Net from schedule{' '}
-                      <span className="font-normal text-slate-500 dark:text-slate-500">
-                        (no bank balance)
-                      </span>
-                    </p>
-                    <p className={`tabular-nums text-lg font-semibold tracking-tight ${netClass(periodNet)}`}>
-                      {money(periodNet)}
-                    </p>
-                  </div>
-                </div>
-                {projectedStartOfPeriod && scheduledNetWithStartBalance !== null ? (
-                  <div className="rounded-xl border border-violet-200/90 bg-violet-50/90 px-3 py-3 dark:border-violet-800/50 dark:bg-violet-950/35">
-                    <p className="text-xs font-medium text-violet-900 dark:text-violet-200">
-                      With balance at start of pay period
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1 text-sm tabular-nums">
-                      <span className="font-semibold text-slate-900 dark:text-slate-50">
-                        {money(projectedStartOfPeriod.balance)}
-                      </span>
-                      <span className="text-slate-400 dark:text-slate-500" aria-hidden>
-                        {periodNet >= 0 ? '+' : '−'}
-                      </span>
-                      <span className={`font-semibold ${netClass(periodNet)}`}>
-                        {money(Math.abs(periodNet))}
-                      </span>
-                      <span className="text-slate-400 dark:text-slate-500" aria-hidden>
-                        =
-                      </span>
-                      <span
-                        className={`text-lg font-bold ${netClass(scheduledNetWithStartBalance)}`}
-                      >
-                        {money(scheduledNetWithStartBalance)}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-center text-[10px] leading-snug text-violet-800/85 dark:text-violet-300/80">
-                      Rough sanity check vs projected checking.
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </details>
+          <div className="rounded-lg border border-emerald-200/90 bg-emerald-50/80 px-3 py-2.5 dark:border-emerald-800/50 dark:bg-emerald-950/35">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Pay this period</p>
+            <p className="mt-1 tabular-nums text-base font-semibold text-emerald-700 dark:text-emerald-400">
+              {money(periodIncome)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-rose-200/90 bg-rose-50/80 px-3 py-2.5 dark:border-rose-800/50 dark:bg-rose-950/35">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Due this period</p>
+            <p className="mt-1 tabular-nums text-base font-semibold text-rose-700 dark:text-rose-400">
+              {money(periodTotal)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Roll over to next period</p>
+            <p className={`mt-1 tabular-nums text-base font-bold ${netClass(endingRollover)}`}>
+              {money(endingRollover)}
+            </p>
+          </div>
         </div>
 
         <h3 className="mt-6 text-base font-semibold text-slate-900 dark:text-slate-50">
@@ -710,10 +300,7 @@ export function UpcomingPage() {
 
       <div className="flex flex-wrap items-center gap-3 print:hidden">
         <Link to="/settings" className="btn-secondary text-sm">
-          Pay schedule & balance
-        </Link>
-        <Link to="/bills" className="btn-secondary text-sm">
-          Manage bills
+          Pay schedule
         </Link>
         <Link to="/calendar" className="btn-secondary text-sm">
           Month calendar
