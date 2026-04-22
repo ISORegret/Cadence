@@ -1,5 +1,5 @@
 import { addDays, eachDayOfInterval, format, parseISO } from 'date-fns'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { categoryChipClasses, categoryDotClass } from '../lib/categoryColors'
 import { formatMoney } from '../lib/money'
@@ -16,7 +16,7 @@ import {
   toISODate,
   totalAmount,
 } from '../lib/payPeriod'
-import type { Bill, ExpenseEntry, OneOffItem } from '../types'
+import type { Bill, ExpenseEntry, OneOffItem, Outflow } from '../types'
 import { PageUndo } from '../components/PageUndo'
 import { useFinanceStore } from '../store/financeStore'
 
@@ -172,6 +172,25 @@ export function UpcomingPage() {
     ? `${format(period.intervalStart, 'MMM d')} - ${format(payPeriodInclusiveLastDay(period), 'MMM d')}`
     : ''
 
+  const daysWithFlows = useMemo(() => {
+    const list: { iso: string; day: Date; flows: Outflow[] }[] = []
+    for (const d of calendarDays) {
+      const iso = toISODate(d)
+      const flows = byDate.get(iso)
+      if (!flows?.length) continue
+      list.push({ iso, day: d, flows })
+    }
+    return list
+  }, [calendarDays, byDate])
+
+  const [openDayIsos, setOpenDayIsos] = useState<string[]>([])
+
+  // Initialize the open state whenever the period changes.
+  // We keep the UI compact by default: open the first 1–2 active days only.
+  useEffect(() => {
+    setOpenDayIsos(daysWithFlows.slice(0, 2).map((d) => d.iso))
+  }, [periodOffset, daysWithFlows])
+
   if (!paySettings) {
     return (
       <div className="card p-8 text-left">
@@ -313,46 +332,96 @@ export function UpcomingPage() {
             page (e.g. $550 monthly on day 2).
           </p>
         ) : (
-          <div className="mt-4 space-y-5">
-            {calendarDays.map((d) => {
-              const iso = toISODate(d)
-              const dayFlows = byDate.get(iso)
-              if (!dayFlows?.length) return null
-              const daySum = totalAmount(dayFlows)
-              return (
-                <div key={iso}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {format(d, 'EEEE, MMM d')} · {money(daySum)} scheduled
-                  </p>
-                  <ul className="mt-2 space-y-2">
-                    {dayFlows.map((o) => (
-                      <li
-                        key={paidKeyForOutflow(o)}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2 text-sm dark:border-white/10 dark:bg-zinc-900/40"
-                      >
-                        <span className="min-w-0 font-medium text-slate-900 dark:text-slate-100">
-                          {o.name}
-                        </span>
-                        <span className="shrink-0 tabular-nums text-slate-800 dark:text-slate-200">
-                          {money(o.amount)}
-                        </span>
-                        {o.category?.trim() ? (
-                          <span
-                            className={`inline-flex w-full items-center gap-1.5 text-xs sm:w-auto ${categoryChipClasses(o.category)}`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${categoryDotClass(o.category)}`}
-                              aria-hidden
-                            />
-                            {o.category}
-                          </span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )
-            })}
+          <div className="mt-3 space-y-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                {daysWithFlows.length} active day{daysWithFlows.length === 1 ? '' : 's'} ·{' '}
+                {outflows.length} outflow{outflows.length === 1 ? '' : 's'} ·{' '}
+                <span className="font-semibold">{money(periodTotal)}</span> scheduled
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOpenDayIsos(daysWithFlows.map((d) => d.iso))}
+                  className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                >
+                  Expand all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpenDayIsos([])}
+                  className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                >
+                  Collapse all
+                </button>
+              </div>
+            </div>
+
+            <div className="divide-y divide-slate-200/70 overflow-hidden rounded-lg border border-slate-200/80 bg-white/60 dark:divide-white/10 dark:border-white/10 dark:bg-zinc-900/30">
+              {daysWithFlows.map(({ iso, day, flows }) => {
+                const daySum = totalAmount(flows)
+                const isOpen = openDayIsos.includes(iso)
+                return (
+                  <details
+                    key={iso}
+                    open={isOpen}
+                    onToggle={(e) => {
+                      const nextOpen = (e.currentTarget as HTMLDetailsElement).open
+                      setOpenDayIsos((prev) => {
+                        if (nextOpen) return prev.includes(iso) ? prev : [...prev, iso]
+                        return prev.filter((x) => x !== iso)
+                      })
+                    }}
+                    className="group"
+                  >
+                    <summary className="cursor-pointer list-none px-3 py-2 text-sm hover:bg-slate-50/70 dark:hover:bg-white/5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {format(day, 'EEE, MMM d')}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                            {flows.length} item{flows.length === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                        <p className="shrink-0 tabular-nums text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {money(daySum)}
+                        </p>
+                      </div>
+                    </summary>
+
+                    <ul className="px-3 pb-2">
+                      {flows.map((o) => (
+                        <li
+                          key={paidKeyForOutflow(o)}
+                          className="flex items-start justify-between gap-3 border-t border-slate-200/70 py-1.5 text-sm first:border-t-0 dark:border-white/10"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-slate-900 dark:text-slate-100">
+                              {o.name}
+                            </p>
+                            {o.category?.trim() ? (
+                              <p
+                                className={`mt-0.5 inline-flex items-center gap-1.5 text-[11px] ${categoryChipClasses(o.category)}`}
+                              >
+                                <span
+                                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${categoryDotClass(o.category)}`}
+                                  aria-hidden
+                                />
+                                {o.category}
+                              </p>
+                            ) : null}
+                          </div>
+                          <p className="shrink-0 tabular-nums text-slate-900 dark:text-slate-100">
+                            {money(o.amount)}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
