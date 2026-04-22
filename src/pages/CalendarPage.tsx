@@ -7,7 +7,6 @@ import {
   eachCalendarDayInMonth,
   estimatedTakeHomeInRange,
   getCurrentPayPeriod,
-  payPeriodInclusiveLastDay,
   groupOutflowsByDate,
   listExpenseOutflowsInRange,
   listOneOffOutflowsInRange,
@@ -46,11 +45,6 @@ export function CalendarPage() {
   const expenseEntries = useFinanceStore((s) => s.expenseEntries)
   const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
   const incomeLines = useFinanceStore((s) => s.incomeLines)
-  const periodNotes = useFinanceStore((s) => s.periodNotes)
-  const upsertPeriodNote = useFinanceStore((s) => s.upsertPeriodNote)
-  const preferences = useFinanceStore((s) => s.preferences)
-  const addCalendarReminder = useFinanceStore((s) => s.addCalendarReminder)
-  const removeCalendarReminder = useFinanceStore((s) => s.removeCalendarReminder)
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()))
   const [catFilter, setCatFilter] = useState('')
 
@@ -118,14 +112,6 @@ export function CalendarPage() {
 
   const today = new Date()
   const period = paySettings ? getCurrentPayPeriod(today, paySettings) : null
-  const periodStartStr = period ? toISODate(period.intervalStart) : ''
-  const periodEndExStr = period ? toISODate(period.intervalEndExclusive) : ''
-  const noteThisPeriod = periodNotes.find(
-    (n) =>
-      n.periodStart === periodStartStr &&
-      n.periodEndExclusive === periodEndExStr,
-  )
-  const reminders = preferences.calendarReminders ?? []
 
   return (
     <div className="space-y-5 text-left sm:space-y-6">
@@ -383,120 +369,6 @@ export function CalendarPage() {
           })}
         </div>
       </div>
-
-      {paySettings && period && (
-        <div className="grid gap-5 md:grid-cols-2">
-          <div className="card">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3 dark:border-white/10">
-              <div className="min-w-0">
-                <p className="section-label">Notes</p>
-                <h3 className="mt-1 text-base font-bold text-slate-900 dark:text-white">
-                  Pay period note
-                </h3>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Current pay period: {format(period.intervalStart, 'MMM d')} →{' '}
-                  {format(payPeriodInclusiveLastDay(period), 'MMM d')} (next payday{' '}
-                  {format(period.nextPayday, 'MMM d')}). Saved with your backup.
-                </p>
-              </div>
-              <PageUndo />
-            </div>
-            <textarea
-              key={`${periodStartStr}|${periodEndExStr}`}
-              defaultValue={noteThisPeriod?.body ?? ''}
-              onBlur={(e) =>
-                upsertPeriodNote({
-                  periodStart: periodStartStr,
-                  periodEndExclusive: periodEndExStr,
-                  body: e.target.value,
-                })
-              }
-              rows={4}
-              className="input-field mt-3 min-h-[5rem] resize-y"
-              placeholder="Notes for this pay period…"
-            />
-          </div>
-          <div className="card">
-            <p className="section-label">Reminders</p>
-            <h3 className="mt-1 text-base font-bold text-slate-900 dark:text-white">
-              Popup reminders
-            </h3>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              When the date-time passes, a dialog appears if Cadence is open. On the
-              phone app, allow system notifications (Summary or Settings) to also
-              get a tray alert. For automatic alerts on upcoming bills, use{' '}
-              <Link to="/settings" className="link-accent">
-                Settings → Alerts
-              </Link>
-              . Snooze or dismiss from the popup.
-            </p>
-            <form
-              className="mt-3 flex flex-col gap-2"
-              onSubmit={(e) => {
-                e.preventDefault()
-                const fd = new FormData(e.currentTarget)
-                const title = String(fd.get('crTitle') || '').trim()
-                const body = String(fd.get('crBody') || '').trim()
-                const remindAt = String(fd.get('crWhen') || '')
-                if (!title || !remindAt) return
-                addCalendarReminder({ title, body, remindAt })
-                e.currentTarget.reset()
-              }}
-            >
-              <input
-                name="crTitle"
-                placeholder="Title"
-                className="input-field"
-                required
-              />
-              <textarea
-                name="crBody"
-                placeholder="Details (optional)"
-                rows={2}
-                className="input-field resize-y"
-              />
-              <input
-                name="crWhen"
-                type="datetime-local"
-                className="input-field"
-                required
-              />
-              <button type="submit" className="btn-primary text-sm">
-                Add reminder
-              </button>
-            </form>
-            {reminders.length > 0 ? (
-              <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm dark:border-white/10">
-                {reminders
-                  .slice()
-                  .sort((a, b) => a.remindAt.localeCompare(b.remindAt))
-                  .map((r) => (
-                    <li
-                      key={r.id}
-                      className="flex flex-wrap items-start justify-between gap-2"
-                    >
-                      <div>
-                        <p className="font-medium text-slate-800 dark:text-slate-200">
-                          {r.title}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {r.remindAt.replace('T', ' ')}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="text-xs text-red-600 hover:underline dark:text-red-400"
-                        onClick={() => removeCalendarReminder(r.id)}
-                      >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-              </ul>
-            ) : null}
-          </div>
-        </div>
-      )}
 
       <div className="card">
         {paySettings && period ? (
