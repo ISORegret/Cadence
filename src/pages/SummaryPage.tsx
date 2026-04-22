@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, format } from 'date-fns'
+import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatMoney } from '../lib/money'
@@ -7,9 +7,11 @@ import {
   listOneOffOutflowsInRange,
   listOutflowsInRange,
   mergeAllOutflowLists,
+  paidKeyForOutflow,
   payPeriodInclusiveLastDay,
   totalAmount,
 } from '../lib/payPeriod'
+import type { Outflow } from '../types'
 import { hasSavingsAnchor } from '../lib/savingsAccount'
 import { CashflowStandingBadge } from '../components/CashflowStandingBadge'
 import { PageUndo } from '../components/PageUndo'
@@ -28,6 +30,8 @@ export function SummaryPage() {
   const addSavingsAccountTransfer = useFinanceStore((s) => s.addSavingsAccountTransfer)
   const removeSavingsAccountTransfer = useFinanceStore((s) => s.removeSavingsAccountTransfer)
   const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
+  const paidOutflowKeys = useFinanceStore((s) => s.paidOutflowKeys)
+  const togglePaidKey = useFinanceStore((s) => s.togglePaidKey)
 
   const [qeNote, setQeNote] = useState('')
   const [qeAmount, setQeAmount] = useState('')
@@ -143,6 +147,28 @@ export function SummaryPage() {
       dayOfPeriodLabel: dayLabel,
     }
   }, [paySettings, period, bills, oneOffItems, expenseEntries, today])
+
+  /** Withdrawals in this pay period whose due date is today or earlier — hidden until the due day (e.g. due the 25th won’t show on the 24th). */
+  const dueThroughTodayRows = useMemo(() => {
+    if (!paySettings || !period) return [] as Outflow[]
+    const outflows = mergeAllOutflowLists([
+      listOutflowsInRange(bills, period.intervalStart, period.intervalEndExclusive),
+      listOneOffOutflowsInRange(oneOffItems, period.intervalStart, period.intervalEndExclusive),
+      listExpenseOutflowsInRange(expenseEntries, period.intervalStart, period.intervalEndExclusive),
+    ])
+    return outflows
+      .filter((o) => o.date <= todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name))
+  }, [
+    paySettings,
+    period,
+    bills,
+    oneOffItems,
+    expenseEntries,
+    todayStr,
+  ])
+
+  const isPaid = (o: Outflow) => paidOutflowKeys.includes(paidKeyForOutflow(o))
 
   if (!paySettings || !period) {
     return (
@@ -417,6 +443,91 @@ export function SummaryPage() {
             if you want the bucket balance to be a true projected savings balance (instead of “net moved”).
           </p>
         ) : null}
+      </div>
+
+      <div className="card">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3 dark:border-white/10">
+          <div className="min-w-0">
+            <p className="section-label">Paid status</p>
+            <h3 className="mt-1 text-base font-bold text-slate-900 dark:text-white">
+              Due through today
+            </h3>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Only withdrawals scheduled on or before today appear here. If something is due tomorrow, it
+              shows up once that date arrives. Check off when paid — amount and label strike through.
+            </p>
+          </div>
+          <PageUndo />
+        </div>
+
+        {dueThroughTodayRows.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
+            Nothing scheduled through today in this pay period (or everything left is dated later this
+            period).
+          </p>
+        ) : (
+          <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+            {dueThroughTodayRows.map((o) => {
+              const pk = paidKeyForOutflow(o)
+              const paid = isPaid(o)
+              return (
+                <li key={pk} className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0">
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={paid}
+                      onChange={() => togglePaidKey(pk)}
+                      className="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 dark:border-slate-600"
+                      aria-label={paid ? `Paid: ${o.name}` : `Mark paid: ${o.name}`}
+                    />
+                    <div>
+                      <p className="font-medium text-slate-900 dark:text-slate-100">
+                        <span
+                          className={
+                            paid
+                              ? 'text-slate-500 line-through dark:text-slate-500'
+                              : ''
+                          }
+                        >
+                          {o.name}
+                        </span>
+                        {paid ? (
+                          <span className="ml-2 text-xs font-normal text-emerald-600 dark:text-emerald-400">
+                            Paid
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {format(parseISO(o.date), 'EEE, MMM d')}
+                        {o.category ? ` · ${o.category}` : ''}
+                        {o.source === 'oneoff'
+                          ? ' · One-off'
+                          : o.source === 'expense'
+                            ? ' · Expense'
+                            : o.payFrom === 'savings'
+                              ? ' · From bucket'
+                              : ''}
+                      </p>
+                      {o.note ? (
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{o.note}</p>
+                      ) : null}
+                    </div>
+                  </label>
+                  <span
+                    className={[
+                      'shrink-0 tabular-nums text-sm font-semibold',
+                      paid
+                        ? 'text-slate-400 line-through'
+                        : 'text-slate-800 dark:text-slate-200',
+                    ].join(' ')}
+                  >
+                    {money(o.amount)}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
     </div>
   )
