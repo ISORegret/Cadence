@@ -168,6 +168,9 @@ export function UpcomingPage() {
     n >= 0
       ? 'text-emerald-700 dark:text-emerald-400'
       : 'text-rose-700 dark:text-rose-400'
+  const periodTitle = period
+    ? `${format(period.intervalStart, 'MMM d')} - ${format(payPeriodInclusiveLastDay(period), 'MMM d')}`
+    : ''
 
   if (!paySettings) {
     return (
@@ -190,39 +193,45 @@ export function UpcomingPage() {
 
   return (
     <div className="space-y-4 text-left sm:space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="section-label">Upcoming</p>
-          <h2 className="mt-0.5 text-lg font-bold tracking-tight text-slate-900 dark:text-white sm:text-xl">
-            {labelRange}
-          </h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Same pay period as Summary: last deposit through the day before your next deposit.
-            Bills, one-offs, and expense log entries are grouped by day.
-          </p>
+      <div className="card space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <p className="section-label">Upcoming</p>
+            <h2 className="mt-0.5 text-lg font-bold tracking-tight text-slate-900 dark:text-white sm:text-xl">
+              {periodTitle}
+            </h2>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Payday-to-payday due view.
+            </p>
+          </div>
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-none sm:gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPeriodOffset((w) => w - 1)}
+              className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodOffset(0)}
+              className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
+            >
+              This period
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodOffset((w) => w + 1)}
+              className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
+            >
+              Next
+            </button>
+          </div>
         </div>
-        <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-none sm:gap-1.5">
-          <button
-            type="button"
-            onClick={() => setPeriodOffset((w) => w - 1)}
-            className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
-          >
-            Prev
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeriodOffset(0)}
-            className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
-          >
-            This period
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeriodOffset((w) => w + 1)}
-            className="btn-secondary min-h-12 !px-2 !py-2.5 text-sm sm:!px-3"
-          >
-            Next
-          </button>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            {labelRange}
+          </p>
         </div>
       </div>
 
@@ -236,7 +245,7 @@ export function UpcomingPage() {
         </div>
       ) : null}
 
-      <div className="card">
+      <div className="card space-y-4">
         <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
           This pay period
         </h3>
@@ -257,7 +266,7 @@ export function UpcomingPage() {
           </p>
         ) : null}
 
-        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+        <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50">
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Roll over from prior periods</p>
             <p className={`mt-1 tabular-nums text-base font-semibold ${netClass(rolloverBalance)}`}>
@@ -289,11 +298,11 @@ export function UpcomingPage() {
           </div>
         </div>
 
-        <h3 className="mt-6 text-base font-semibold text-slate-900 dark:text-slate-50">
+        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
           Scheduled outflows
         </h3>
         <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-          Every dated line in this pay period — same amounts as the projected checking walk above.
+          By day, in this pay period.
         </p>
         {outflows.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">

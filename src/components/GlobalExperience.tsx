@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core'
-import { addDays, format, isAfter, parseISO } from 'date-fns'
+import { format } from 'date-fns'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -24,18 +24,11 @@ export function GlobalExperience() {
   const incomeLines = useFinanceStore((s) => s.incomeLines)
   const preferences = useFinanceStore((s) => s.preferences)
   const setPreferences = useFinanceStore((s) => s.setPreferences)
-  const removeCalendarReminder = useFinanceStore(
-    (s) => s.removeCalendarReminder,
-  )
-  const snoozeCalendarReminder = useFinanceStore(
-    (s) => s.snoozeCalendarReminder,
-  )
 
   const [splashDone, setSplashDone] = useState(false)
   const [hydrated, setHydrated] = useState(
     () => useFinanceStore.persist.hasHydrated(),
   )
-  const [reminderTick, setReminderTick] = useState(0)
   const [lowBalanceOpen, setLowBalanceOpen] = useState(false)
   const [lowBalanceMin, setLowBalanceMin] = useState<number | null>(null)
 
@@ -48,11 +41,6 @@ export function GlobalExperience() {
 
   useEffect(() => {
     return useFinanceStore.persist.onFinishHydration(() => setHydrated(true))
-  }, [])
-
-  useEffect(() => {
-    const id = window.setInterval(() => setReminderTick((n) => n + 1), 45_000)
-    return () => window.clearInterval(id)
   }, [])
 
   useEffect(() => {
@@ -135,18 +123,6 @@ export function GlobalExperience() {
     setPreferences,
   ])
 
-  const dueReminder = useMemo(() => {
-    void reminderTick
-    const list = preferences.calendarReminders ?? []
-    const now = new Date()
-    return list.find((r) => {
-      const at = parseISO(r.remindAt)
-      if (isAfter(at, now)) return false
-      if (!r.snoozedUntil) return true
-      return !isAfter(parseISO(r.snoozedUntil), now)
-    })
-  }, [preferences.calendarReminders, reminderTick])
-
   const money = (n: number) => formatMoney(n, paySettings)
 
   return (
@@ -189,7 +165,7 @@ export function GlobalExperience() {
               shows the month; you can export backups anytime.
             </p>
             <ul className="mt-4 list-inside list-disc space-y-1.5 text-sm text-slate-600 dark:text-slate-400">
-              <li>Popup reminders you add on the Calendar page</li>
+              <li>Due-date reminders from bill schedules</li>
               <li>Optional alert when projected balance drops below a limit</li>
               <li>
                 On the phone app, system notifications when you allow them; on the
@@ -205,49 +181,6 @@ export function GlobalExperience() {
             >
               Get started
             </button>
-          </div>
-        </div>
-      )}
-
-      {dueReminder && splashDone && hydrated && !showIntro && (
-        <div
-          className="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="reminder-title"
-        >
-          <div className="card w-full max-w-md shadow-2xl">
-            <p className="section-label">Reminder</p>
-            <h2
-              id="reminder-title"
-              className="mt-2 text-lg font-bold text-slate-900 dark:text-white"
-            >
-              {dueReminder.title}
-            </h2>
-            {dueReminder.body ? (
-              <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">
-                {dueReminder.body}
-              </p>
-            ) : null}
-            <div className="mt-6 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn-secondary flex-1"
-                onClick={() => {
-                  const until = addDays(new Date(), 1).toISOString()
-                  snoozeCalendarReminder(dueReminder.id, until)
-                }}
-              >
-                Tomorrow
-              </button>
-              <button
-                type="button"
-                className="btn-primary flex-1"
-                onClick={() => removeCalendarReminder(dueReminder.id)}
-              >
-                Dismiss
-              </button>
-            </div>
           </div>
         </div>
       )}
