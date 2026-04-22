@@ -386,11 +386,11 @@ export function BillsPage() {
               className="select-field mt-1 w-full"
             >
               <option value="checking">Spending / checking</option>
-              <option value="savings">Savings (already set aside)</option>
+              <option value="savings">Bill bucket (already set aside)</option>
             </select>
             <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-              “Savings” bills are excluded from checking projections so they don’t reduce spendable
-              cash twice.
+              “Bill bucket” bills still show as due, but are excluded from cash projections so they
+              don’t reduce spendable cash twice.
             </span>
           </label>
           <label className="block sm:col-span-2">

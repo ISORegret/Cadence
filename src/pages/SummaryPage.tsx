@@ -42,13 +42,17 @@ export function SummaryPage() {
   const money = (n: number) => formatMoney(n, paySettings)
 
   const {
-    dueThisPeriod,
+    dueFromCashThisPeriod,
+    dueFromBillBucketThisPeriod,
+    dueTotalThisPeriod,
     periodLabel,
     dayOfPeriodLabel,
   } = useMemo(() => {
     if (!paySettings || !period) {
       return {
-        dueThisPeriod: 0,
+        dueFromCashThisPeriod: 0,
+        dueFromBillBucketThisPeriod: 0,
+        dueTotalThisPeriod: 0,
         periodLabel: '',
         dayOfPeriodLabel: '',
       }
@@ -60,8 +64,11 @@ export function SummaryPage() {
       listExpenseOutflowsInRange(expenseEntries, period.intervalStart, period.intervalEndExclusive),
     ])
 
-    // Option A: bills paid from savings should not reduce checking/spending due totals.
-    const checkingOutflows = outflows.filter(
+    // Option A: "Bill bucket" bills are still due, but shouldn't reduce cash twice.
+    const billBucketBillOutflows = outflows.filter(
+      (o) => o.source === 'bill' && (o.payFrom ?? 'checking') === 'savings',
+    )
+    const cashOutflows = outflows.filter(
       (o) => o.source !== 'bill' || (o.payFrom ?? 'checking') !== 'savings',
     )
 
@@ -71,7 +78,7 @@ export function SummaryPage() {
 
     let savedApplied = 0
     const appliedByBill = new Map<string, number>()
-    for (const o of checkingOutflows) {
+    for (const o of cashOutflows) {
       if (o.source !== 'bill') continue
       const available = billSavedMap.get(o.billId) ?? 0
       if (available <= 0) continue
@@ -83,8 +90,10 @@ export function SummaryPage() {
     }
     savedApplied = [...appliedByBill.values()].reduce((s, v) => s + v, 0)
 
-    const total = totalAmount(checkingOutflows)
-    const due = Math.max(0, total - savedApplied)
+    const cashTotal = totalAmount(cashOutflows)
+    const dueFromCash = Math.max(0, cashTotal - savedApplied)
+    const dueFromBucket = totalAmount(billBucketBillOutflows)
+    const dueTotal = dueFromCash + dueFromBucket
 
     const inclusiveEnd = payPeriodInclusiveLastDay(period)
     const periodLabelLocal = `${format(period.intervalStart, 'MMM d')} – ${format(inclusiveEnd, 'MMM d')}`
@@ -99,7 +108,9 @@ export function SummaryPage() {
     const dayLabel = `Day ${dayIdx} of ${totalDays}`
 
     return {
-      dueThisPeriod: due,
+      dueFromCashThisPeriod: dueFromCash,
+      dueFromBillBucketThisPeriod: dueFromBucket,
+      dueTotalThisPeriod: dueTotal,
       periodLabel: periodLabelLocal,
       dayOfPeriodLabel: dayLabel,
     }
@@ -159,10 +170,10 @@ export function SummaryPage() {
             Payment due (this pay period)
           </p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-            {money(dueThisPeriod)}
+            {money(dueTotalThisPeriod)}
           </p>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Excludes bills marked “Pay from savings”.
+            Cash {money(dueFromCashThisPeriod)} · Bill bucket {money(dueFromBillBucketThisPeriod)}
           </p>
         </div>
       </div>
@@ -251,12 +262,12 @@ export function SummaryPage() {
       </div>
 
       <div className="card">
-        <p className="section-label">Savings</p>
+        <p className="section-label">Bill bucket</p>
         <h3 className="mt-1 text-base font-bold text-slate-900 dark:text-white">
-          Move to savings bucket
+          Move money in/out
         </h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Records money moved between checking and savings.
+          Record money you set aside so bills can be paid from the bucket without reducing cash twice.
         </p>
         <form
           className="mt-3 flex flex-wrap gap-2"
