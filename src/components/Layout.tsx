@@ -90,6 +90,14 @@ function IconRepeat({ className = 'size-[1.15rem] shrink-0' }: { className?: str
   )
 }
 
+function IconBarsYear({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 20V10M10 20V4M16 20v-6M22 20V8" />
+    </svg>
+  )
+}
+
 const PRIMARY_NAV_ITEMS = [
   { to: '/summary', label: 'Summary', icon: IconHome },
   { to: '/upcoming', label: 'Upcoming', icon: IconClock },
@@ -99,6 +107,7 @@ const PRIMARY_NAV_ITEMS = [
 
 const TOOL_NAV_ITEMS = [
   { to: '/bills', label: 'Bills', icon: IconReceipt },
+  { to: '/this-year', label: 'This year', icon: IconBarsYear },
 ] as const
 
 const ROUTE_TITLE_LOOKUP = new Map<string, string>([

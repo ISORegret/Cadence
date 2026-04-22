@@ -1,14 +1,16 @@
-import { differenceInCalendarDays, format, parseISO } from 'date-fns'
+import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatMoney } from '../lib/money'
 import {
+  getPayPeriodAtOffset,
   listExpenseOutflowsInRange,
   listOneOffOutflowsInRange,
   listOutflowsInRange,
   mergeAllOutflowLists,
   paidKeyForOutflow,
   payPeriodInclusiveLastDay,
+  toISODate,
   totalAmount,
 } from '../lib/payPeriod'
 import type { Outflow } from '../types'
@@ -43,10 +45,28 @@ export function SummaryPage() {
   const [txDate, setTxDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [txDir, setTxDir] = useState<'to_savings' | 'from_savings'>('to_savings')
   const [txNote, setTxNote] = useState('')
+  /** Pay period shown in Paid status (0 = current). */
+  const [paidPeriodOffset, setPaidPeriodOffset] = useState(0)
+  const [paidStatusOpen, setPaidStatusOpen] = useState(true)
 
-  const { todayStr, today, period, projectedBalanceEndOfToday, projectedSavingsEndOfToday, standing } =
-    useCadenceHealth()
+  const {
+    todayStr,
+    today,
+    period,
+    projectedBalanceEndOfToday,
+    projectedBalanceEndOfPayPeriod,
+    projectedSavingsEndOfToday,
+    standing,
+  } = useCadenceHealth()
   const money = (n: number) => formatMoney(n, paySettings)
+
+  /** Red / green / neutral for signed dollar amounts (headlines & balances). */
+  const signedAmountClass = (n: number | null) => {
+    if (n === null) return 'text-slate-900 dark:text-white'
+    if (n < 0) return 'text-rose-600 dark:text-rose-400'
+    if (n > 0) return 'text-emerald-600 dark:text-emerald-400'
+    return 'text-slate-900 dark:text-white'
+  }
 
   const netBucketMoved = useMemo(() => {
     return savingsAccountTransfers
@@ -72,6 +92,20 @@ export function SummaryPage() {
     // Without a savings anchor, the best we can do is "checking + net moved".
     return `${money(projectedBalanceEndOfToday + netBucketMoved)} (approx.)`
   }, [projectedBalanceEndOfToday, projectedSavingsEndOfToday, money, netBucketMoved])
+
+  const totalFundsAmount = useMemo(() => {
+    if (projectedBalanceEndOfToday === null) return null
+    if (projectedSavingsEndOfToday !== null) {
+      return projectedBalanceEndOfToday + projectedSavingsEndOfToday
+    }
+    return projectedBalanceEndOfToday + netBucketMoved
+  }, [projectedBalanceEndOfToday, projectedSavingsEndOfToday, netBucketMoved])
+
+  const bucketToneAmount = useMemo(() => {
+    if (!paySettings) return null
+    if (projectedSavingsEndOfToday !== null) return projectedSavingsEndOfToday
+    return netBucketMoved
+  }, [paySettings, projectedSavingsEndOfToday, netBucketMoved])
 
   const {
     dueFromCashThisPeriod,
@@ -148,24 +182,59 @@ export function SummaryPage() {
     }
   }, [paySettings, period, bills, oneOffItems, expenseEntries, today])
 
-  /** Withdrawals in this pay period whose due date is today or earlier — hidden until the due day (e.g. due the 25th won’t show on the 24th). */
-  const dueThroughTodayRows = useMemo(() => {
-    if (!paySettings || !period) return [] as Outflow[]
+  /**
+   * Withdrawals for the selected pay period. Current period: only through today (due on the 25th
+   * won’t show on the 24th). Past periods: full list so you can review paid status.
+   */
+  const paidStatusPack = useMemo(() => {
+    if (!paySettings) {
+      return {
+        rows: [] as Outflow[],
+        viewedLabel: '',
+        hint: '',
+        viewingPast: false,
+        viewingFuture: false,
+      }
+    }
+    const viewed = getPayPeriodAtOffset(parseISO(todayStr), paySettings, paidPeriodOffset)
+    const lastDayStr = toISODate(addDays(viewed.intervalEndExclusive, -1))
+    const periodStartStr = toISODate(viewed.intervalStart)
+    const viewingPast = lastDayStr < todayStr
+    const viewingFuture = periodStartStr > todayStr
+
     const outflows = mergeAllOutflowLists([
-      listOutflowsInRange(bills, period.intervalStart, period.intervalEndExclusive),
-      listOneOffOutflowsInRange(oneOffItems, period.intervalStart, period.intervalEndExclusive),
-      listExpenseOutflowsInRange(expenseEntries, period.intervalStart, period.intervalEndExclusive),
+      listOutflowsInRange(bills, viewed.intervalStart, viewed.intervalEndExclusive),
+      listOneOffOutflowsInRange(oneOffItems, viewed.intervalStart, viewed.intervalEndExclusive),
+      listExpenseOutflowsInRange(expenseEntries, viewed.intervalStart, viewed.intervalEndExclusive),
     ])
-    return outflows
-      .filter((o) => o.date <= todayStr)
+
+    const rows = outflows
+      .filter((o) => viewingPast || o.date <= todayStr)
       .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name))
+
+    const viewedLabel = `${format(viewed.intervalStart, 'MMM d')} – ${format(
+      payPeriodInclusiveLastDay(viewed),
+      'MMM d',
+    )}`
+
+    let hint =
+      'Only withdrawals scheduled on or before today appear here. If something is due tomorrow, it shows up once that date arrives. Check off when paid — amount and label strike through.'
+    if (viewingPast) {
+      hint =
+        'Past pay period — every scheduled withdrawal for these dates. Same paid checkboxes as the rest of the app; use Undo if you toggle by mistake.'
+    } else if (viewingFuture) {
+      hint =
+        'This pay period hasn’t started on the calendar yet — items appear on or after each due date (and only when that date is today or earlier).'
+    }
+
+    return { rows, viewedLabel, hint, viewingPast, viewingFuture }
   }, [
     paySettings,
-    period,
+    todayStr,
+    paidPeriodOffset,
     bills,
     oneOffItems,
     expenseEntries,
-    todayStr,
   ])
 
   const isPaid = (o: Outflow) => paidOutflowKeys.includes(paidKeyForOutflow(o))
@@ -206,20 +275,39 @@ export function SummaryPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-3">
         <div className="card">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Checking (estimate)
           </p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
+          <p
+            className={[
+              'mt-1 text-2xl font-bold tabular-nums',
+              signedAmountClass(projectedBalanceEndOfToday),
+            ].join(' ')}
+          >
             {projectedBalanceEndOfToday !== null ? money(projectedBalanceEndOfToday) : '—'}
           </p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Total funds (checking + bucket): <span className="tabular-nums">{totalFundsLabel}</span>
+          <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+            <span className="font-medium text-slate-500 dark:text-slate-400">Bucket balance</span>{' '}
+            <span className={['tabular-nums', signedAmountClass(bucketToneAmount)].join(' ')}>
+              {billBucketBalanceLabel}
+            </span>
           </p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
             Uses your Starting funds + scheduled paychecks/withdrawals through today. Transfers to the
             bucket reduce checking.
+          </p>
+          <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Total funds (checking + bucket)
+          </p>
+          <p
+            className={[
+              'mt-1 text-2xl font-bold tabular-nums',
+              signedAmountClass(totalFundsAmount),
+            ].join(' ')}
+          >
+            {totalFundsLabel}
           </p>
         </div>
 
@@ -233,8 +321,23 @@ export function SummaryPage() {
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Cash due {money(dueFromCashThisPeriod)} · Bucket-paid due {money(dueFromBillBucketThisPeriod)}
           </p>
+        </div>
+
+        <div className="card">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Checking at period end (est.)
+          </p>
+          <p
+            className={[
+              'mt-1 text-2xl font-bold tabular-nums',
+              signedAmountClass(projectedBalanceEndOfPayPeriod),
+            ].join(' ')}
+          >
+            {projectedBalanceEndOfPayPeriod !== null ? money(projectedBalanceEndOfPayPeriod) : '—'}
+          </p>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Bucket balance <span className="tabular-nums">{billBucketBalanceLabel}</span>
+            Projected checking on the last day of this pay period — after scheduled deposits and withdrawals
+            (checking only; bucket is separate).
           </p>
         </div>
       </div>
@@ -445,29 +548,74 @@ export function SummaryPage() {
         ) : null}
       </div>
 
-      <div className="card">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3 dark:border-white/10">
-          <div className="min-w-0">
-            <p className="section-label">Paid status</p>
-            <h3 className="mt-1 text-base font-bold text-slate-900 dark:text-white">
-              Due through today
-            </h3>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Only withdrawals scheduled on or before today appear here. If something is due tomorrow, it
-              shows up once that date arrives. Check off when paid — amount and label strike through.
-            </p>
+      <details
+        className="group card open:shadow-sm"
+        open={paidStatusOpen}
+        onToggle={(e) => setPaidStatusOpen(e.currentTarget.open)}
+      >
+        <summary className="list-none cursor-pointer select-none [&::-webkit-details-marker]:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-white/10">
+            <div className="min-w-0 text-left">
+              <p className="section-label">Paid status</p>
+              <h3 className="mt-1 text-base font-bold text-slate-900 dark:text-white">
+                {paidPeriodOffset === 0 ? 'Due through today' : 'Withdrawals in this period'}
+              </h3>
+              <p className="mt-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
+                {paidStatusPack.viewedLabel}
+              </p>
+            </div>
+            <span
+              className="shrink-0 text-slate-400 transition-transform group-open:rotate-180"
+              aria-hidden
+            >
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </span>
           </div>
+        </summary>
+
+        <div className="mt-3">
+        <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
           <PageUndo />
         </div>
+        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{paidStatusPack.hint}</p>
 
-        {dueThroughTodayRows.length === 0 ? (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setPaidPeriodOffset((o) => o - 1)}
+            className="btn-secondary min-h-10 !px-3 !py-2 text-xs font-semibold sm:text-sm"
+          >
+            Previous period
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaidPeriodOffset(0)}
+            className="btn-secondary min-h-10 !px-3 !py-2 text-xs font-semibold sm:text-sm"
+          >
+            This period
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaidPeriodOffset((o) => o + 1)}
+            className="btn-secondary min-h-10 !px-3 !py-2 text-xs font-semibold sm:text-sm"
+          >
+            Next period
+          </button>
+        </div>
+
+        {paidStatusPack.rows.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-            Nothing scheduled through today in this pay period (or everything left is dated later this
-            period).
+            {paidStatusPack.viewingFuture
+              ? 'Nothing here yet — this period hasn’t started on the calendar.'
+              : paidStatusPack.viewingPast
+                ? 'No withdrawals in this pay period.'
+                : 'Nothing scheduled through today in this pay period (or everything left is dated later this period).'}
           </p>
         ) : (
           <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
-            {dueThroughTodayRows.map((o) => {
+            {paidStatusPack.rows.map((o) => {
               const pk = paidKeyForOutflow(o)
               const paid = isPaid(o)
               return (
@@ -528,7 +676,8 @@ export function SummaryPage() {
             })}
           </ul>
         )}
-      </div>
+        </div>
+      </details>
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { SummaryPage } from './pages/SummaryPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UpcomingPage } from './pages/UpcomingPage'
+import { ThisYearPage } from './pages/ThisYearPage'
 import { YearPage } from './pages/YearPage'
 
 type AppRoute = {
@@ -30,6 +31,7 @@ const APP_ROUTES: AppRoute[] = [
   { path: 'calendar', render: () => <CalendarPage /> },
   { path: 'upcoming', render: () => <UpcomingPage /> },
   { path: 'year', render: () => <YearPage /> },
+  { path: 'this-year', render: () => <ThisYearPage /> },
   { path: 'bills', render: () => <BillsPage /> },
   {
     path: 'settings',

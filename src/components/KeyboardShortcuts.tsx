@@ -51,7 +51,7 @@ export function KeyboardShortcuts() {
         !e.metaKey
       ) {
         const k = e.key.toLowerCase()
-        if (['s', 'c', 'u', 'b', 'y', 'r', 'i'].includes(k)) {
+        if (['s', 'c', 'u', 'b', 'y', 'w', 'r', 'i'].includes(k)) {
           e.preventDefault()
           seqRef.current = null
           const map: Record<string, string> = {
@@ -60,6 +60,7 @@ export function KeyboardShortcuts() {
             u: '/upcoming',
             b: '/bills',
             y: '/year',
+            w: '/this-year',
             r: '/subscriptions',
             i: '/import',
           }
@@ -155,6 +156,18 @@ export function KeyboardShortcuts() {
               then{' '}
               <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-zinc-800">
                 y
+              </kbd>
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-2 dark:border-white/10">
+            <dt className="text-slate-600 dark:text-slate-400">This year (remaining)</dt>
+            <dd>
+              <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-zinc-800">
+                g
+              </kbd>{' '}
+              then{' '}
+              <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-zinc-800">
+                w
               </kbd>
             </dd>
           </div>
