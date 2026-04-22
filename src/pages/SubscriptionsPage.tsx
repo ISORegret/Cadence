@@ -108,43 +108,45 @@ export function SubscriptionsPage() {
             .
           </p>
         ) : (
-          <ul className="mt-4 space-y-3">
-            {recurringRows.map(({ bill, monthlyEq }) => (
-              <li
-                key={bill.id}
-                className="rounded-xl border border-slate-200/80 bg-white/80 px-3 py-3 dark:border-white/10 dark:bg-zinc-900/40"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <div className="mt-4 overflow-x-auto">
+            <div className="min-w-[52rem]">
+              <div className="grid grid-cols-[minmax(14rem,1.6fr)_minmax(12rem,1.2fr)_minmax(10rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)] gap-x-4 border-b border-slate-200/80 px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-white/10 dark:text-slate-400">
+                <span>Name</span>
+                <span>Schedule</span>
+                <span>Category</span>
+                <span className="text-right">Amount</span>
+                <span className="text-right">Monthly eq</span>
+                <span className="text-right">Annual eq</span>
+              </div>
+              <ul className="divide-y divide-slate-200/70 dark:divide-white/10">
+                {recurringRows.map(({ bill, monthlyEq }) => (
+                  <li
+                    key={bill.id}
+                    className="grid grid-cols-[minmax(14rem,1.6fr)_minmax(12rem,1.2fr)_minmax(10rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)] gap-x-4 px-2 py-2 text-sm hover:bg-slate-50/60 dark:hover:bg-white/5"
+                  >
+                    <span className="min-w-0 truncate font-semibold text-slate-900 dark:text-slate-100">
                       {bill.name}
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    </span>
+                    <span className="min-w-0 truncate text-xs text-slate-600 dark:text-slate-300">
                       {scheduleShort(bill.schedule)}
-                      {bill.category ? ` · ${bill.category}` : ''}
-                    </p>
-                  </div>
-                  <p className="shrink-0 tabular-nums text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {money(bill.amount)}
-                  </p>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                  <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-2 py-1.5 dark:border-white/10 dark:bg-zinc-900/50">
-                    <p className="font-medium text-slate-500 dark:text-slate-400">Monthly eq.</p>
-                    <p className="mt-0.5 tabular-nums text-sm text-slate-800 dark:text-slate-200">
+                    </span>
+                    <span className="min-w-0 truncate text-xs text-slate-600 dark:text-slate-300">
+                      {bill.category?.trim() ? bill.category : '—'}
+                    </span>
+                    <span className="text-right tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                      {money(bill.amount)}
+                    </span>
+                    <span className="text-right tabular-nums text-slate-800 dark:text-slate-200">
                       {money(monthlyEq ?? 0)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-2 py-1.5 dark:border-white/10 dark:bg-zinc-900/50">
-                    <p className="font-medium text-slate-500 dark:text-slate-400">Annual eq.</p>
-                    <p className="mt-0.5 tabular-nums text-sm text-slate-800 dark:text-slate-200">
+                    </span>
+                    <span className="text-right tabular-nums text-slate-800 dark:text-slate-200">
                       {money((monthlyEq ?? 0) * 12)}
-                    </p>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         )}
       </div>
 
@@ -156,7 +158,7 @@ export function SubscriptionsPage() {
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Excluded from recurring monthly totals.
           </p>
-          <ul className="mt-3 space-y-2 text-sm">
+          <ul className="mt-3 space-y-1.5 text-sm">
             {oneTimeBills.map((b) => (
               <li key={b.id} className="flex justify-between gap-2">
                 <span className="text-slate-700 dark:text-slate-300">{b.name}</span>
