@@ -26,6 +26,7 @@ export function SummaryPage() {
   const preferences = useFinanceStore((s) => s.preferences)
   const setPreferences = useFinanceStore((s) => s.setPreferences)
   const addSavingsAccountTransfer = useFinanceStore((s) => s.addSavingsAccountTransfer)
+  const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
 
   const [qeNote, setQeNote] = useState('')
   const [qeAmount, setQeAmount] = useState('')
@@ -38,8 +39,21 @@ export function SummaryPage() {
   const [txDir, setTxDir] = useState<'to_savings' | 'from_savings'>('to_savings')
   const [txNote, setTxNote] = useState('')
 
-  const { today, period, projectedBalanceEndOfToday, standing } = useCadenceHealth()
+  const { todayStr, today, period, projectedBalanceEndOfToday, projectedSavingsEndOfToday, standing } =
+    useCadenceHealth()
   const money = (n: number) => formatMoney(n, paySettings)
+
+  const billBucketBalanceLabel = useMemo(() => {
+    if (!paySettings) return '—'
+    // If a savings baseline is configured, show the projected savings balance (end of today).
+    if (projectedSavingsEndOfToday !== null) return money(projectedSavingsEndOfToday)
+
+    // Otherwise, still show something that moves: net of recorded transfers up through today.
+    const net = savingsAccountTransfers
+      .filter((t) => t.date <= todayStr)
+      .reduce((s, t) => s + (t.direction === 'to_savings' ? t.amount : -t.amount), 0)
+    return `${money(net)} (net moved)`
+  }, [paySettings, projectedSavingsEndOfToday, money, savingsAccountTransfers, todayStr])
 
   const {
     dueFromCashThisPeriod,
@@ -269,6 +283,10 @@ export function SummaryPage() {
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           Record money you set aside so bills can be paid from the bucket without reducing cash twice.
         </p>
+        <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
+          <span className="font-semibold">Bucket balance:</span>{' '}
+          <span className="tabular-nums">{billBucketBalanceLabel}</span>
+        </p>
         <form
           className="mt-3 flex flex-wrap gap-2"
           onSubmit={(e) => {
@@ -327,7 +345,7 @@ export function SummaryPage() {
             <Link to="/settings#savings-account" className="font-semibold underline">
               Settings
             </Link>{' '}
-            if you want savings projections too.
+            if you want the bucket balance to be a true projected savings balance (instead of “net moved”).
           </p>
         ) : null}
       </div>
