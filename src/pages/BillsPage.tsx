@@ -176,6 +176,11 @@ export function BillsPage() {
     const category = String(fd.get('category') || '').trim() || undefined
     const envRaw = String(fd.get('envelopeId') || '').trim()
     const envelopeId = envRaw || undefined
+    const savedRaw = Number(fd.get('savedAmount'))
+    const savedAmount =
+      Number.isFinite(savedRaw) && savedRaw > 0
+        ? Math.max(0, Math.min(amount, savedRaw))
+        : 0
 
     if (!editingId) {
       const dup = findDuplicateBill(bills, { name, amount, schedule })
@@ -208,6 +213,7 @@ export function BillsPage() {
       note,
       category,
       envelopeId,
+      savedAmount,
       confidence: amountIsEstimate ? ('estimate' as const) : undefined,
     }
 
