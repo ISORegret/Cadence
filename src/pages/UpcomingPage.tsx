@@ -40,6 +40,14 @@ export function UpcomingPage() {
   const oneOffItems = useFinanceStore((s) => s.oneOffItems)
   const expenseEntries = useFinanceStore((s) => s.expenseEntries)
 
+  const billSavedMap = useMemo(
+    () =>
+      new Map<string, number>(
+        bills.map((b) => [b.id, Math.max(0, b.savedAmount ?? 0)]),
+      ),
+    [bills],
+  )
+
   const [periodOffset, setPeriodOffset] = useState(0)
 
   const period = useMemo(() => {
@@ -66,6 +74,22 @@ export function UpcomingPage() {
 
   const byDate = useMemo(() => groupOutflowsByDate(outflows), [outflows])
   const periodTotal = totalAmount(outflows)
+  const periodSavedApplied = useMemo(() => {
+    if (!period || outflows.length === 0) return 0
+    const appliedByBill = new Map<string, number>()
+    for (const o of outflows) {
+      if (o.source !== 'bill') continue
+      const available = billSavedMap.get(o.billId) ?? 0
+      if (available <= 0) continue
+      const already = appliedByBill.get(o.billId) ?? 0
+      const remain = Math.max(0, available - already)
+      if (remain <= 0) continue
+      const applied = Math.min(remain, o.amount)
+      appliedByBill.set(o.billId, already + applied)
+    }
+    return [...appliedByBill.values()].reduce((s, v) => s + v, 0)
+  }, [period, outflows, billSavedMap])
+  const periodDueAfterSaved = Math.max(0, periodTotal - periodSavedApplied)
 
   const paydaysInPeriod = useMemo(() => {
     if (!paySettings || !period) return []
@@ -94,21 +118,42 @@ export function UpcomingPage() {
         oneOffItems,
         expenseEntries,
       )
-      const due = totalAmount(flows)
+      const periodSavedByBill = new Map<string, number>()
+      for (const o of flows) {
+        if (o.source !== 'bill') continue
+        const available = billSavedMap.get(o.billId) ?? 0
+        if (available <= 0) continue
+        const already = periodSavedByBill.get(o.billId) ?? 0
+        const remain = Math.max(0, available - already)
+        if (remain <= 0) continue
+        const applied = Math.min(remain, o.amount)
+        periodSavedByBill.set(o.billId, already + applied)
+      }
+      const savedApplied = [...periodSavedByBill.values()].reduce((s, v) => s + v, 0)
+      const due = Math.max(0, totalAmount(flows) - savedApplied)
       const payCount = [
         ...listPaydayDatesInOpenRange(
-        p.intervalStart,
-        p.intervalEndExclusive,
-        paySettings,
+          p.intervalStart,
+          p.intervalEndExclusive,
+          paySettings,
         ),
       ].length
       total += payCount * primaryPayAmount - due
     }
     return total
-  }, [period, paySettings, periodOffset, bills, oneOffItems, expenseEntries, primaryPayAmount])
+  }, [
+    period,
+    paySettings,
+    periodOffset,
+    bills,
+    oneOffItems,
+    expenseEntries,
+    primaryPayAmount,
+    billSavedMap,
+  ])
 
   const availableThisPeriod = rolloverBalance + periodIncome
-  const endingRollover = availableThisPeriod - periodTotal
+  const endingRollover = availableThisPeriod - periodDueAfterSaved
 
   const calendarDays = useMemo(() => {
     if (!period) return []
@@ -201,7 +246,7 @@ export function UpcomingPage() {
             in the title only.
           </p>
         ) : null}
-        {paydaysInPeriod.length === 0 && periodTotal > 0 ? (
+        {paydaysInPeriod.length === 0 && periodDueAfterSaved > 0 ? (
           <p className="mt-2 rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-xs leading-snug text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/35 dark:text-amber-100">
             No paycheck dates fell in this pay period for your schedule, so this period uses $0 income
             while due bills may still appear. Check your anchor pay date in{' '}
@@ -228,8 +273,13 @@ export function UpcomingPage() {
           <div className="rounded-lg border border-rose-200/90 bg-rose-50/80 px-3 py-2.5 dark:border-rose-800/50 dark:bg-rose-950/35">
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Due this period</p>
             <p className="mt-1 tabular-nums text-base font-semibold text-rose-700 dark:text-rose-400">
-              {money(periodTotal)}
+              {money(periodDueAfterSaved)}
             </p>
+            {periodSavedApplied > 0 ? (
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                After applying {money(periodSavedApplied)} already saved for bills
+              </p>
+            ) : null}
           </div>
           <div className="rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50">
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Roll over to next period</p>

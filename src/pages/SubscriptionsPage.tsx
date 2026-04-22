@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Bill, BillSchedule } from '../types'
+import { estimatedMonthlyBillOutflow } from '../lib/recurringMonthly'
 import { useFinanceStore } from '../store/financeStore'
 
 const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -32,11 +33,17 @@ export function SubscriptionsPage() {
     })
 
   const recurringRows = bills
-    .filter((b: Bill) => b.schedule.kind !== 'once')
-    .sort((a, b) => b.amount - a.amount)
+    .map((b: Bill) => ({
+      bill: b,
+      monthlyEq: estimatedMonthlyBillOutflow(b.schedule, b.amount),
+    }))
+    .filter((x) => x.bill.schedule.kind !== 'once')
+    .sort((a, b) => (b.monthlyEq ?? 0) - (a.monthlyEq ?? 0))
 
   const oneTimeBills = bills.filter((b) => b.schedule.kind === 'once')
-  const recurringBaseTotal = recurringRows.reduce((s, b) => s + b.amount, 0)
+  const recurringBaseTotal = recurringRows.reduce((s, x) => s + x.bill.amount, 0)
+  const recurringMonthlyEqTotal = recurringRows.reduce((s, x) => s + (x.monthlyEq ?? 0), 0)
+  const recurringAnnualEqTotal = recurringMonthlyEqTotal * 12
 
   return (
     <div className="space-y-6 text-left print:max-w-none">
@@ -55,7 +62,7 @@ export function SubscriptionsPage() {
         </p>
       </div>
 
-      <div className="card grid gap-4 sm:grid-cols-2">
+      <div className="card grid gap-4 sm:grid-cols-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Recurring bill count
@@ -70,6 +77,17 @@ export function SubscriptionsPage() {
           </p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
             {money(recurringBaseTotal)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Annual total (normalized)
+          </p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
+            {money(recurringAnnualEqTotal)}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            Uses schedule-based monthly equivalent × 12.
           </p>
         </div>
       </div>
@@ -90,16 +108,18 @@ export function SubscriptionsPage() {
             .
           </p>
         ) : (
-          <table className="mt-4 w-full min-w-[640px] text-left text-sm">
+          <table className="mt-4 w-full min-w-[700px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500 dark:border-slate-700 dark:text-slate-400">
                 <th className="py-2 pr-3">Name</th>
                 <th className="py-2 pr-3">Schedule</th>
-                <th className="py-2 text-right">Amount</th>
+                <th className="py-2 pr-3 text-right">Amount</th>
+                <th className="py-2 pr-3 text-right">Monthly eq.</th>
+                <th className="py-2 text-right">Annual eq.</th>
               </tr>
             </thead>
             <tbody>
-              {recurringRows.map((bill) => (
+              {recurringRows.map(({ bill, monthlyEq }) => (
                 <tr
                   key={bill.id}
                   className="border-b border-slate-100 dark:border-slate-800"
@@ -115,7 +135,13 @@ export function SubscriptionsPage() {
                   <td className="py-2.5 pr-3 text-slate-600 dark:text-slate-400">
                     {scheduleShort(bill.schedule)}
                   </td>
-                  <td className="py-2.5 text-right tabular-nums">{money(bill.amount)}</td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums">{money(bill.amount)}</td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums font-medium">
+                    {money(monthlyEq ?? 0)}
+                  </td>
+                  <td className="py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-400">
+                    {money((monthlyEq ?? 0) * 12)}
+                  </td>
                 </tr>
               ))}
             </tbody>

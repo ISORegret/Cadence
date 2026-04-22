@@ -53,6 +53,8 @@ export interface Bill {
   id: string
   name: string
   amount: number
+  /** Amount already set aside for this bill. Used to reduce upcoming due totals. */
+  savedAmount?: number
   schedule: BillSchedule
   recurrence?: BillRecurrence
   note?: string
