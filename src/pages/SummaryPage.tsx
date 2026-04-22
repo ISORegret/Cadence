@@ -26,6 +26,7 @@ export function SummaryPage() {
   const preferences = useFinanceStore((s) => s.preferences)
   const setPreferences = useFinanceStore((s) => s.setPreferences)
   const addSavingsAccountTransfer = useFinanceStore((s) => s.addSavingsAccountTransfer)
+  const removeSavingsAccountTransfer = useFinanceStore((s) => s.removeSavingsAccountTransfer)
   const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
 
   const [qeNote, setQeNote] = useState('')
@@ -359,6 +360,54 @@ export function SummaryPage() {
             Add
           </button>
         </form>
+
+        {savingsAccountTransfers.length > 0 ? (
+          <div className="mt-4 border-t border-slate-100 pt-3 dark:border-white/10">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Recent bucket moves
+            </p>
+            <ul className="mt-2 space-y-2 text-sm">
+              {[...savingsAccountTransfers]
+                .slice()
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .slice(0, 12)
+                .map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-slate-800 dark:text-slate-200">
+                        <span className="tabular-nums font-semibold">{money(t.amount)}</span>{' '}
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {t.direction === 'to_savings' ? '→ bucket' : '← from bucket'}
+                        </span>
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {t.date}
+                        {t.note?.trim() ? ` · ${t.note.trim()}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-red-600 hover:underline dark:text-red-400"
+                      onClick={() => {
+                        const ok = window.confirm('Delete this bucket move?')
+                        if (!ok) return
+                        removeSavingsAccountTransfer(t.id)
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </li>
+                ))}
+            </ul>
+            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+              Need older entries? Manage the full list in{' '}
+              <Link to="/settings#savings-account" className="font-semibold underline">
+                Settings
+              </Link>
+              .
+            </p>
+          </div>
+        ) : null}
         {!hasSavingsAnchor(paySettings) ? (
           <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
             Add a savings balance baseline in{' '}
