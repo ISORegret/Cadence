@@ -55,6 +55,12 @@ export interface Bill {
   amount: number
   /** Amount already set aside for this bill. Used to reduce upcoming due totals. */
   savedAmount?: number
+  /**
+   * Where this bill is paid from.
+   * - `checking` (default): counted in spending / checking projections
+   * - `savings`: excluded from checking projections (assumes you moved money to savings already)
+   */
+  payFrom?: 'checking' | 'savings'
   schedule: BillSchedule
   recurrence?: BillRecurrence
   note?: string
@@ -148,6 +154,8 @@ export interface Outflow {
   amount: number
   date: string
   source: OutflowSource
+  /** For bill outflows: whether it’s paid from checking or savings. */
+  payFrom?: 'checking' | 'savings'
   category?: string
   envelopeId?: string
   note?: string

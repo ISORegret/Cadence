@@ -176,6 +176,11 @@ export function BillsPage() {
     const category = String(fd.get('category') || '').trim() || undefined
     const envRaw = String(fd.get('envelopeId') || '').trim()
     const envelopeId = envRaw || undefined
+    const payFromRaw = String(fd.get('payFrom') || '').trim()
+    const payFrom =
+      payFromRaw === 'savings' || payFromRaw === 'checking'
+        ? (payFromRaw as 'checking' | 'savings')
+        : 'checking'
     const savedRaw = Number(fd.get('savedAmount'))
     const savedAmount =
       Number.isFinite(savedRaw) && savedRaw > 0
@@ -214,6 +219,7 @@ export function BillsPage() {
       category,
       envelopeId,
       savedAmount,
+      payFrom,
       confidence: amountIsEstimate ? ('estimate' as const) : undefined,
     }
 
@@ -369,6 +375,23 @@ export function BillsPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Pay from
+            </span>
+            <select
+              name="payFrom"
+              defaultValue={editing?.payFrom ?? 'checking'}
+              className="select-field mt-1 w-full"
+            >
+              <option value="checking">Spending / checking</option>
+              <option value="savings">Savings (already set aside)</option>
+            </select>
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+              “Savings” bills are excluded from checking projections so they don’t reduce spendable
+              cash twice.
+            </span>
           </label>
           <label className="block sm:col-span-2">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">

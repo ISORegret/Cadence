@@ -311,6 +311,7 @@ function pushOutflow(
     amount: bill.amount,
     date: toISODate(d),
     source: 'bill',
+    payFrom: bill.payFrom ?? 'checking',
     category: bill.category,
     envelopeId: bill.envelopeId,
     note: bill.note,

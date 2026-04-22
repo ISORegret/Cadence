@@ -73,11 +73,15 @@ export function UpcomingPage() {
   }, [bills, oneOffItems, expenseEntries, period])
 
   const byDate = useMemo(() => groupOutflowsByDate(outflows), [outflows])
-  const periodTotal = totalAmount(outflows)
+  const checkingOutflows = useMemo(
+    () => outflows.filter((o) => o.source !== 'bill' || (o.payFrom ?? 'checking') !== 'savings'),
+    [outflows],
+  )
+  const periodTotal = totalAmount(checkingOutflows)
   const periodSavedApplied = useMemo(() => {
-    if (!period || outflows.length === 0) return 0
+    if (!period || checkingOutflows.length === 0) return 0
     const appliedByBill = new Map<string, number>()
-    for (const o of outflows) {
+    for (const o of checkingOutflows) {
       if (o.source !== 'bill') continue
       const available = billSavedMap.get(o.billId) ?? 0
       if (available <= 0) continue
@@ -88,7 +92,7 @@ export function UpcomingPage() {
       appliedByBill.set(o.billId, already + applied)
     }
     return [...appliedByBill.values()].reduce((s, v) => s + v, 0)
-  }, [period, outflows, billSavedMap])
+  }, [period, checkingOutflows, billSavedMap])
   const periodDueAfterSaved = Math.max(0, periodTotal - periodSavedApplied)
 
   const paydaysInPeriod = useMemo(() => {

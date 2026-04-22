@@ -25,7 +25,7 @@ import {
 
 /** Bills included in checking projections — full scheduled amounts on their due dates. */
 export function billsForCheckingProjection(bills: Bill[]): Bill[] {
-  return bills
+  return bills.filter((b) => (b.payFrom ?? 'checking') !== 'savings')
 }
 
 function mergedDayOutflows(
