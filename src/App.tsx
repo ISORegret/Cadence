@@ -14,7 +14,7 @@ import { YearPage } from './pages/YearPage'
 
 type AppRoute = {
   path: string
-  element: ReactNode
+  render: () => ReactNode
 }
 
 /** Supports GitHub Pages subpath (`VITE_BASE=/repo/app/`) and Capacitor `./`. */
@@ -26,21 +26,21 @@ function routerBasename(): string | undefined {
 }
 
 const APP_ROUTES: AppRoute[] = [
-  { path: 'calendar', element: <CalendarPage /> },
-  { path: 'upcoming', element: <UpcomingPage /> },
-  { path: 'year', element: <YearPage /> },
-  { path: 'bills', element: <BillsPage /> },
+  { path: 'calendar', render: () => <CalendarPage /> },
+  { path: 'upcoming', render: () => <UpcomingPage /> },
+  { path: 'year', render: () => <YearPage /> },
+  { path: 'bills', render: () => <BillsPage /> },
   {
     path: 'settings',
-    element: (
+    render: () => (
       <RouteErrorBoundary>
         <SettingsPage />
       </RouteErrorBoundary>
     ),
   },
-  { path: 'debt', element: <DebtTool /> },
-  { path: 'subscriptions', element: <SubscriptionsPage /> },
-  { path: 'import', element: <BankImportPage /> },
+  { path: 'debt', render: () => <DebtTool /> },
+  { path: 'subscriptions', render: () => <SubscriptionsPage /> },
+  { path: 'import', render: () => <BankImportPage /> },
 ]
 
 export default function App() {
@@ -50,8 +50,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Summary />} />
-            {APP_ROUTES.map(({ path, element }) => (
-              <Route key={path} path={path} element={element} />
+            {APP_ROUTES.map(({ path, render }) => (
+              <Route key={path} path={path} element={render()} />
             ))}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
