@@ -6,6 +6,7 @@ import {
   buildBackup,
   downloadJson,
   parseBackupJson,
+  parseBillAppendJson,
   type BackupPayload,
 } from '../lib/backup'
 import { buildFinanceCsv, downloadCsv } from '../lib/csvExport'
@@ -36,6 +37,7 @@ export function SettingsPage() {
   const envelopes = useFinanceStore((s) => s.envelopes)
   const setPaySettings = useFinanceStore((s) => s.setPaySettings)
   const replaceFromBackup = useFinanceStore((s) => s.replaceFromBackup)
+  const appendBills = useFinanceStore((s) => s.appendBills)
   const setLastExportAt = useFinanceStore((s) => s.setLastExportAt)
   const addEnvelope = useFinanceStore((s) => s.addEnvelope)
   const removeEnvelope = useFinanceStore((s) => s.removeEnvelope)
@@ -322,10 +324,19 @@ export function SettingsPage() {
     const reader = new FileReader()
     reader.onload = () => {
       const text = String(reader.result ?? '')
+      const appendDrafts = parseBillAppendJson(text)
+      if (appendDrafts) {
+        const ok = window.confirm(
+          `Add ${appendDrafts.length} bills to your existing budget (nothing else changes)? You can undo once from the floating undo control if needed.`,
+        )
+        if (!ok) return
+        appendBills(appendDrafts)
+        return
+      }
       const parsed = parseBackupJson(text)
       if (!parsed) {
         window.alert(
-          'Could not read this file. Use a backup JSON exported from this app.',
+          'Could not read this file. Use a backup JSON exported from Cadence, or a bill-append file with "cadenceBillAppend": true.',
         )
         return
       }
@@ -1291,8 +1302,12 @@ export function SettingsPage() {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Your budget data already saves on this device as you use the app. Export
           downloads a file you keep (Google Drive, email, computer). There is no
-          separate cloud backup until you export. JSON includes everything (restore
-          with Import). CSV is for spreadsheets only.
+          separate cloud backup until you export. Full JSON backup replaces everything
+          when you import it. A bill-append JSON (starts with{' '}
+          <code className="rounded bg-slate-100 px-1 font-mono text-[0.8em] dark:bg-white/10">
+            cadenceBillAppend
+          </code>
+          ) only adds bills. CSV is for spreadsheets only.
         </p>
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
           On Android, export opens a system screen so you can save the file to Downloads,

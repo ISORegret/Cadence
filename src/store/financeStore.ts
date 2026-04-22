@@ -177,6 +177,8 @@ interface FinanceState extends PersistSlice {
   clearPaidKeys: () => void
 
   addBill: (b: Omit<Bill, 'id'>) => void
+  /** Add many bills at once (e.g. append import). Each draft gets a new id. */
+  appendBills: (drafts: Omit<Bill, 'id'>[]) => void
   updateBill: (id: string, patch: Partial<Omit<Bill, 'id'>>) => void
   removeBill: (id: string) => void
 }
@@ -557,6 +559,17 @@ export const useFinanceStore = create<FinanceState>()(
             bills: [...state.bills, { ...b, id: newId() }],
           }),
         ),
+
+      appendBills: (drafts) =>
+        set((state) => {
+          if (drafts.length === 0) return state
+          const added = drafts.map((d) =>
+            sanitizeBill({ ...d, id: newId() }),
+          )
+          return {
+            ...withUndo(state, { bills: [...state.bills, ...added] }),
+          } as FinanceState
+        }),
 
       updateBill: (id, patch) =>
         set((state) =>

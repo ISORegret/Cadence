@@ -152,6 +152,69 @@ function isBill(x: unknown): x is Bill {
   return true
 }
 
+/** Bill rows for append import — same shape as `Bill` but no `id` (assigned on import). */
+function isBillAppendEntry(x: unknown): x is Omit<Bill, 'id'> {
+  if (!x || typeof x !== 'object') return false
+  const b = x as Record<string, unknown>
+  if ('id' in b) return false
+  if (
+    typeof b.name !== 'string' ||
+    typeof b.amount !== 'number' ||
+    Number.isNaN(b.amount) ||
+    !isBillSchedule(b.schedule)
+  ) {
+    return false
+  }
+  if (b.recurrence !== undefined && !isBillRecurrence(b.recurrence)) return false
+  if (b.note !== undefined && typeof b.note !== 'string') return false
+  if (b.category !== undefined && typeof b.category !== 'string') return false
+  if (b.envelopeId !== undefined && typeof b.envelopeId !== 'string') return false
+  if (
+    b.payFrom !== undefined &&
+    b.payFrom !== 'checking' &&
+    b.payFrom !== 'savings'
+  ) {
+    return false
+  }
+  if (
+    b.savedAmount !== undefined &&
+    (typeof b.savedAmount !== 'number' || Number.isNaN(b.savedAmount))
+  ) {
+    return false
+  }
+  if (
+    b.confidence !== undefined &&
+    b.confidence !== 'estimate' &&
+    b.confidence !== 'confirmed'
+  ) {
+    return false
+  }
+  return true
+}
+
+/**
+ * JSON file shape: `{ "cadenceBillAppend": true, "bills": [ ... ] }`
+ * Each bill omits `id`; IDs are assigned when merging into the store.
+ */
+export function parseBillAppendJson(text: string): Omit<Bill, 'id'>[] | null {
+  let data: unknown
+  try {
+    data = JSON.parse(text) as unknown
+  } catch {
+    return null
+  }
+  if (!data || typeof data !== 'object') return null
+  const o = data as Record<string, unknown>
+  if (o.cadenceBillAppend !== true) return null
+  if (!Array.isArray(o.bills)) return null
+  const out: Omit<Bill, 'id'>[] = []
+  for (const item of o.bills) {
+    if (!isBillAppendEntry(item)) return null
+    out.push(item)
+  }
+  return out
+}
+
 function isPaySettings(x: unknown): x is PaySettings {
   if (!x || typeof x !== 'object') return false
   const p = x as Record<string, unknown>

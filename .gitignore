@@ -31,3 +31,6 @@ android/local.properties
 android/captures
 android/*.iml
 .gradle
+
+# Local-only Cadence append imports (may contain personal finance data)
+imports/private/
