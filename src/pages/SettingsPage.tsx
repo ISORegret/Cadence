@@ -1384,7 +1384,7 @@ export function SettingsPage() {
       </div>
 
       <p className="text-center text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
-        Web app v{APP_VERSION} · Built{' '}
+        App v{APP_VERSION} · Built{' '}
         {new Date(BUILD_TIME_ISO).toLocaleString(undefined, {
           dateStyle: 'medium',
           timeStyle: 'short',

@@ -1,5 +1,17 @@
 apply plugin: 'com.android.application'
 
+import groovy.json.JsonSlurper
+
+// Same version as the web/PWA build (`package.json` → Vite `__APP_VERSION__`).
+def cadencePackageJson = new JsonSlurper().parseText(
+    new File(rootProject.projectDir.parent, 'package.json').getText('UTF-8')
+)
+def semverParts = cadencePackageJson.version.toString().tokenize('.')
+def vMajor = semverParts.isEmpty() ? 0 : (semverParts[0] as int)
+def vMinor = semverParts.size() > 1 ? (semverParts[1] as int) : 0
+def vPatch = semverParts.size() > 2 ? (semverParts[2] as int) : 0
+def cadenceVersionCode = vMajor * 10_000 + vMinor * 100 + vPatch
+
 android {
     namespace "com.cadencebudget.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +19,8 @@ android {
         applicationId "com.cadencebudget.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode cadenceVersionCode
+        versionName cadencePackageJson.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
