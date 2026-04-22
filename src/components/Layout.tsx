@@ -65,6 +65,15 @@ function IconClock({ className = 'size-[1.15rem] shrink-0' }: { className?: stri
   )
 }
 
+function IconHome({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M3 10.5L12 3l9 7.5V21a1.5 1.5 0 01-1.5 1.5H4.5A1.5 1.5 0 013 21v-10.5z" />
+      <path d="M9 22V12h6v10" />
+    </svg>
+  )
+}
+
 function IconReceipt({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -82,6 +91,7 @@ function IconRepeat({ className = 'size-[1.15rem] shrink-0' }: { className?: str
 }
 
 const PRIMARY_NAV_ITEMS = [
+  { to: '/summary', label: 'Summary', icon: IconHome },
   { to: '/upcoming', label: 'Upcoming', icon: IconClock },
   { to: '/calendar', label: 'Calendar', icon: IconCalendar },
   { to: '/subscriptions', label: 'Recurring audit', icon: IconRepeat },
@@ -140,7 +150,7 @@ function MobileRouteContext() {
   const title =
     ROUTE_TITLE_LOOKUP.get(pathname) ??
     (pathname === '/'
-      ? 'Upcoming'
+      ? 'Summary'
       : pathname.startsWith('/settings')
         ? 'Settings'
         : pathname.replace(/^\//, ''))

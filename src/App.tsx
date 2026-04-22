@@ -6,6 +6,7 @@ import { BankImportPage } from './pages/BankImportPage'
 import { BillsPage } from './pages/BillsPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { DebtTool } from './pages/DebtTool'
+import { SummaryPage } from './pages/SummaryPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UpcomingPage } from './pages/UpcomingPage'
@@ -25,6 +26,7 @@ function routerBasename(): string | undefined {
 }
 
 const APP_ROUTES: AppRoute[] = [
+  { path: 'summary', render: () => <SummaryPage /> },
   { path: 'calendar', render: () => <CalendarPage /> },
   { path: 'upcoming', render: () => <UpcomingPage /> },
   { path: 'year', render: () => <YearPage /> },
@@ -48,11 +50,11 @@ export default function App() {
       <div className="flex min-h-0 flex-1 flex-col">
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<Navigate to="/upcoming" replace />} />
+            <Route index element={<Navigate to="/summary" replace />} />
             {APP_ROUTES.map(({ path, render }) => (
               <Route key={path} path={path} element={render()} />
             ))}
-            <Route path="*" element={<Navigate to="/upcoming" replace />} />
+            <Route path="*" element={<Navigate to="/summary" replace />} />
           </Route>
         </Routes>
       </div>

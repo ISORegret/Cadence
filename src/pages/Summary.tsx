@@ -2427,20 +2427,6 @@ export function Summary() {
         </p>
       </div>
 
-      <button
-        type="button"
-        title="Scroll to quick expense"
-        aria-label="Quick add expense"
-        className="print:hidden fixed bottom-[max(5.25rem,env(safe-area-inset-bottom))] right-4 z-40 rounded-full border border-emerald-700/30 bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-900/25 hover:bg-emerald-700 lg:bottom-10 dark:border-emerald-400/25 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-        onClick={() =>
-          document.getElementById('quick-expense-section')?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start',
-          })
-        }
-      >
-        Quick add
-      </button>
     </div>
   )
 }
