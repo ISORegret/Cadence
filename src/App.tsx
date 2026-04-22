@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import { Layout } from './components/Layout'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { BankImportPage } from './pages/BankImportPage'
@@ -11,6 +12,11 @@ import { Summary } from './pages/Summary'
 import { UpcomingPage } from './pages/UpcomingPage'
 import { YearPage } from './pages/YearPage'
 
+type AppRoute = {
+  path: string
+  element: ReactNode
+}
+
 /** Supports GitHub Pages subpath (`VITE_BASE=/repo/app/`) and Capacitor `./`. */
 function routerBasename(): string | undefined {
   const raw = import.meta.env.BASE_URL
@@ -19,6 +25,24 @@ function routerBasename(): string | undefined {
   return t === '' ? undefined : t
 }
 
+const APP_ROUTES: AppRoute[] = [
+  { path: 'calendar', element: <CalendarPage /> },
+  { path: 'upcoming', element: <UpcomingPage /> },
+  { path: 'year', element: <YearPage /> },
+  { path: 'bills', element: <BillsPage /> },
+  {
+    path: 'settings',
+    element: (
+      <RouteErrorBoundary>
+        <SettingsPage />
+      </RouteErrorBoundary>
+    ),
+  },
+  { path: 'debt', element: <DebtTool /> },
+  { path: 'subscriptions', element: <SubscriptionsPage /> },
+  { path: 'import', element: <BankImportPage /> },
+]
+
 export default function App() {
   return (
     <BrowserRouter basename={routerBasename()}>
@@ -26,21 +50,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Summary />} />
-            <Route path="calendar" element={<CalendarPage />} />
-            <Route path="upcoming" element={<UpcomingPage />} />
-            <Route path="year" element={<YearPage />} />
-            <Route path="bills" element={<BillsPage />} />
-            <Route
-              path="settings"
-              element={
-                <RouteErrorBoundary>
-                  <SettingsPage />
-                </RouteErrorBoundary>
-              }
-            />
-            <Route path="debt" element={<DebtTool />} />
-            <Route path="subscriptions" element={<SubscriptionsPage />} />
-            <Route path="import" element={<BankImportPage />} />
+            {APP_ROUTES.map(({ path, element }) => (
+              <Route key={path} path={path} element={element} />
+            ))}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
