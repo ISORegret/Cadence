@@ -42,8 +42,6 @@ export function SubscriptionsPage() {
 
   const oneTimeBills = bills.filter((b) => b.schedule.kind === 'once')
   const recurringBaseTotal = recurringRows.reduce((s, x) => s + x.bill.amount, 0)
-  const recurringMonthlyEqTotal = recurringRows.reduce((s, x) => s + (x.monthlyEq ?? 0), 0)
-  const recurringAnnualEqTotal = recurringMonthlyEqTotal * 12
 
   return (
     <div className="space-y-6 text-left print:max-w-none">
