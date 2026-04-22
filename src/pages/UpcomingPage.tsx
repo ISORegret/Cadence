@@ -397,20 +397,22 @@ export function UpcomingPage() {
                           className="flex items-start justify-between gap-3 border-t border-slate-200/70 py-1.5 text-sm first:border-t-0 dark:border-white/10"
                         >
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-slate-900 dark:text-slate-100">
-                              {o.name}
-                            </p>
-                            {o.category?.trim() ? (
-                              <p
-                                className={`mt-0.5 inline-flex items-center gap-1.5 text-[11px] ${categoryChipClasses(o.category)}`}
-                              >
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                              <span className="min-w-0 truncate font-medium text-slate-900 dark:text-slate-100">
+                                {o.name}
+                              </span>
+                              {o.category?.trim() ? (
                                 <span
-                                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${categoryDotClass(o.category)}`}
-                                  aria-hidden
-                                />
-                                {o.category}
-                              </p>
-                            ) : null}
+                                  className={`inline-flex shrink-0 items-center gap-1.5 text-[11px] ${categoryChipClasses(o.category)}`}
+                                >
+                                  <span
+                                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${categoryDotClass(o.category)}`}
+                                    aria-hidden
+                                  />
+                                  {o.category}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                           <p className="shrink-0 tabular-nums text-slate-900 dark:text-slate-100">
                             {money(o.amount)}

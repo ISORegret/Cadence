@@ -62,7 +62,7 @@ export function SubscriptionsPage() {
         </p>
       </div>
 
-      <div className="card grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="card grid grid-cols-2 gap-3 sm:grid-cols-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Recurring bill count
@@ -79,25 +79,6 @@ export function SubscriptionsPage() {
             {money(recurringBaseTotal)}
           </p>
         </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Monthly total (normalized)
-          </p>
-          <p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-white sm:text-2xl">
-            {money(recurringMonthlyEqTotal)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Annual total (normalized)
-          </p>
-          <p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-white sm:text-2xl">
-            {money(recurringAnnualEqTotal)}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            Monthly normalized × 12.
-          </p>
-        </div>
       </div>
 
       <div className="card">
@@ -105,7 +86,7 @@ export function SubscriptionsPage() {
           Recurring bills
         </h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Focus on what matters: the bill amount and schedule. No monthly/annual estimate math.
+          Each line shows the schedule plus monthly and yearly equivalents.
         </p>
         {recurringRows.length === 0 ? (
           <p className="mt-3 text-sm text-slate-500">
@@ -117,7 +98,7 @@ export function SubscriptionsPage() {
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-slate-200/70 dark:divide-white/10">
-            {recurringRows.map(({ bill }) => (
+            {recurringRows.map(({ bill, monthlyEq }) => (
               <li
                 key={bill.id}
                 className="flex items-start justify-between gap-3 py-2.5 text-sm"
@@ -130,9 +111,20 @@ export function SubscriptionsPage() {
                     {scheduleShort(bill.schedule)}
                   </p>
                 </div>
-                <p className="shrink-0 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                  {money(bill.amount)}
-                </p>
+                <div className="shrink-0 text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Monthly
+                  </p>
+                  <p className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                    {money(monthlyEq ?? 0)}
+                  </p>
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Yearly
+                  </p>
+                  <p className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                    {money((monthlyEq ?? 0) * 12)}
+                  </p>
+                </div>
               </li>
             ))}
           </ul>
