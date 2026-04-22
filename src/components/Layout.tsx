@@ -129,46 +129,76 @@ function IconBell({ className = 'size-[1.15rem] shrink-0' }: { className?: strin
   )
 }
 
-function isToolsSection(location: ReturnType<typeof useLocation>): boolean {
-  const { pathname, hash } = location
-  if (
-    pathname === '/year' ||
-    pathname === '/bills' ||
-    pathname === '/debt' ||
-    pathname === '/subscriptions' ||
-    pathname === '/import'
-  )
-    return true
-  if (pathname === '/settings' && hash === '#alerts') return true
-  return false
+const PRIMARY_NAV_ITEMS = [
+  { to: '/', label: 'Summary', icon: IconLayoutGrid },
+  { to: '/calendar', label: 'Calendar', icon: IconCalendar },
+  { to: '/upcoming', label: 'Upcoming', icon: IconClock },
+] as const
+
+const TOOL_NAV_ITEMS = [
+  { to: '/year', label: 'Year', icon: IconBarsYear },
+  { to: '/bills', label: 'Bills', icon: IconReceipt },
+  { to: '/debt', label: 'Debt', icon: IconScale },
+  { to: '/subscriptions', label: 'Recurring audit', icon: IconRepeat },
+  { to: '/import', label: 'Bank import', icon: IconArrowUpTray },
+] as const
+
+const ALERTS_NAV_ITEM = { to: '/settings#alerts', label: 'Alerts', icon: IconBell } as const
+
+const ROUTE_TITLE_LOOKUP = new Map<string, string>([
+  ...PRIMARY_NAV_ITEMS.map(({ to, label }) => [to, label] as const),
+  ...TOOL_NAV_ITEMS.map(({ to, label }) => [to, label] as const),
+  ['/settings', 'Settings'],
+])
+
+const TOOL_PATHS = new Set<string>(TOOL_NAV_ITEMS.map(({ to }) => to))
+const TOOLS_MENU_ITEMS = [...TOOL_NAV_ITEMS, ALERTS_NAV_ITEM] as const
+
+function isToolsSection(pathname: string, hash: string): boolean {
+  return TOOL_PATHS.has(pathname) || (pathname === '/settings' && hash === '#alerts')
 }
 
-function isSettingsMain(location: ReturnType<typeof useLocation>): boolean {
-  return location.pathname === '/settings' && location.hash !== '#alerts'
+function isSettingsMain(pathname: string, hash: string): boolean {
+  return pathname === '/settings' && hash !== '#alerts'
 }
 
-function isAlertsActive(location: ReturnType<typeof useLocation>): boolean {
-  return location.pathname === '/settings' && location.hash === '#alerts'
+function isAlertsActive(pathname: string, hash: string): boolean {
+  return pathname === '/settings' && hash === '#alerts'
 }
 
 const MENU_MIN_WIDTH = 200
+
+function ThemeField({
+  theme,
+  onThemeChange,
+  labelClassName,
+}: {
+  theme: ThemePreference
+  onThemeChange: (theme: ThemePreference) => void
+  labelClassName: string
+}) {
+  return (
+    <label className={labelClassName}>
+      Theme
+      <select
+        value={theme}
+        onChange={(e) => onThemeChange(e.target.value as ThemePreference)}
+        className="select-field w-full min-h-9 !py-1.5 text-xs"
+      >
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </label>
+  )
+}
 
 function MobileRouteContext() {
   const { pathname } = useLocation()
   const { period, paySettings } = useCadenceHealth()
   if (pathname === '/') return null
-  const titles: Record<string, string> = {
-    '/calendar': 'Calendar',
-    '/upcoming': 'Upcoming',
-    '/year': 'Year',
-    '/bills': 'Bills',
-    '/debt': 'Debt',
-    '/subscriptions': 'Recurring audit',
-    '/import': 'Bank import',
-    '/settings': 'Settings',
-  }
   const title =
-    titles[pathname] ??
+    ROUTE_TITLE_LOOKUP.get(pathname) ??
     (pathname.startsWith('/settings') ? 'Settings' : pathname.replace(/^\//, ''))
   let sub: string | null = null
   if (paySettings && period && pathname !== '/settings') {
@@ -189,6 +219,7 @@ function MobileRouteContext() {
 
 export function Layout() {
   const location = useLocation()
+  const { pathname, hash } = location
   const theme = useFinanceStore((s) => s.preferences.theme)
   const setPreferences = useFinanceStore((s) => s.setPreferences)
   const { standing } = useCadenceHealth()
@@ -252,9 +283,9 @@ export function Layout() {
     return () => window.clearTimeout(id)
   }, [location.pathname, location.hash])
 
-  const toolsActive = isToolsSection(location)
-  const settingsActive = isSettingsMain(location)
-  const summaryActive = location.pathname === '/'
+  const toolsActive = isToolsSection(pathname, hash)
+  const settingsActive = isSettingsMain(pathname, hash)
+  const summaryActive = pathname === '/'
 
   const toolsMenu =
     toolsOpen && menuPos
@@ -270,74 +301,26 @@ export function Layout() {
             }}
             className="max-h-[min(70vh,24rem)] min-w-[12.5rem] overflow-y-auto overscroll-contain rounded-xl border border-slate-200/90 bg-white py-1 shadow-xl shadow-slate-900/25 dark:border-white/10 dark:bg-zinc-900 dark:shadow-black/60"
           >
-            <NavLink
-              to="/year"
-              role="menuitem"
-              className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
-              onClick={() => setToolsOpen(false)}
-            >
-              Year
-            </NavLink>
-            <NavLink
-              to="/bills"
-              role="menuitem"
-              className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
-              onClick={() => setToolsOpen(false)}
-            >
-              Bills
-            </NavLink>
-            <NavLink
-              to="/debt"
-              role="menuitem"
-              className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
-              onClick={() => setToolsOpen(false)}
-            >
-              Debt
-            </NavLink>
-            <NavLink
-              to="/subscriptions"
-              role="menuitem"
-              className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
-              onClick={() => setToolsOpen(false)}
-            >
-              Recurring audit
-            </NavLink>
-            <NavLink
-              to="/import"
-              role="menuitem"
-              className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
-              onClick={() => setToolsOpen(false)}
-            >
-              Bank import
-            </NavLink>
-            <NavLink
-              to="/settings#alerts"
-              role="menuitem"
-              className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
-              onClick={() => setToolsOpen(false)}
-            >
-              Alerts
-            </NavLink>
+            {TOOLS_MENU_ITEMS.map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                role="menuitem"
+                className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
+                onClick={() => setToolsOpen(false)}
+              >
+                {label}
+              </NavLink>
+            ))}
             <div
               className="border-t border-slate-200/80 px-3 py-2 dark:border-white/10"
               role="none"
             >
-              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-400">
-                Theme
-                <select
-                  value={theme}
-                  onChange={(e) =>
-                    setPreferences({
-                      theme: e.target.value as ThemePreference,
-                    })
-                  }
-                  className="select-field w-full min-h-9 !py-1.5 text-xs"
-                >
-                  <option value="system">System</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                </select>
-              </label>
+              <ThemeField
+                theme={theme}
+                onThemeChange={(nextTheme) => setPreferences({ theme: nextTheme })}
+                labelClassName="flex flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-400"
+              />
             </div>
           </div>,
           document.body,
@@ -384,51 +367,33 @@ export function Layout() {
         </div>
 
         <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3" aria-label="Main navigation">
-          <NavLink to="/" end className={() => sidebarNavClass(location.pathname === '/')}>
-            <IconLayoutGrid />
-            Summary
-          </NavLink>
-          <NavLink to="/calendar" className={() => sidebarNavClass(location.pathname === '/calendar')}>
-            <IconCalendar />
-            Calendar
-          </NavLink>
-          <NavLink to="/upcoming" className={() => sidebarNavClass(location.pathname === '/upcoming')}>
-            <IconClock />
-            Upcoming
-          </NavLink>
+          {PRIMARY_NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={() => sidebarNavClass(pathname === to)}
+            >
+              <Icon />
+              {label}
+            </NavLink>
+          ))}
 
           <p className="mb-0.5 mt-4 px-3 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
             Planning
           </p>
-          <NavLink to="/year" className={() => sidebarNavClass(location.pathname === '/year')}>
-            <IconBarsYear />
-            Year
-          </NavLink>
-          <NavLink to="/bills" className={() => sidebarNavClass(location.pathname === '/bills')}>
-            <IconReceipt />
-            Bills
-          </NavLink>
-          <NavLink to="/debt" className={() => sidebarNavClass(location.pathname === '/debt')}>
-            <IconScale />
-            Debt
-          </NavLink>
-          <NavLink
-            to="/subscriptions"
-            className={() => sidebarNavClass(location.pathname === '/subscriptions')}
-          >
-            <IconRepeat />
-            Recurring audit
-          </NavLink>
-          <NavLink to="/import" className={() => sidebarNavClass(location.pathname === '/import')}>
-            <IconArrowUpTray />
-            Bank import
-          </NavLink>
+          {TOOL_NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to} className={() => sidebarNavClass(pathname === to)}>
+              <Icon />
+              {label}
+            </NavLink>
+          ))}
 
           <div className="flex-1 min-h-2" aria-hidden />
 
           <NavLink
             to="/settings#alerts"
-            className={() => sidebarNavClass(isAlertsActive(location))}
+            className={() => sidebarNavClass(isAlertsActive(pathname, hash))}
           >
             <IconBell />
             Alerts
@@ -440,22 +405,11 @@ export function Layout() {
         </nav>
 
         <div className="border-t border-slate-200/80 px-3 py-3 dark:border-white/[0.08]">
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-            Theme
-            <select
-              value={theme}
-              onChange={(e) =>
-                setPreferences({
-                  theme: e.target.value as ThemePreference,
-                })
-              }
-              className="select-field w-full min-h-9 !py-1.5 text-xs"
-            >
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </label>
+          <ThemeField
+            theme={theme}
+            onThemeChange={(nextTheme) => setPreferences({ theme: nextTheme })}
+            labelClassName="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400"
+          />
         </div>
       </aside>
 
@@ -469,15 +423,11 @@ export function Layout() {
               aria-label="Main navigation"
             >
               <div className="inline-flex min-h-0 min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-1 [&::-webkit-scrollbar]:hidden">
-                <NavLink to="/" end className={() => pill(location.pathname === '/')}>
-                  Summary
-                </NavLink>
-                <NavLink to="/calendar" className={() => pill(location.pathname === '/calendar')}>
-                  Calendar
-                </NavLink>
-                <NavLink to="/upcoming" className={() => pill(location.pathname === '/upcoming')}>
-                  Upcoming
-                </NavLink>
+                {PRIMARY_NAV_ITEMS.map(({ to, label }) => (
+                  <NavLink key={to} to={to} end={to === '/'} className={() => pill(pathname === to)}>
+                    {label}
+                  </NavLink>
+                ))}
                 <button
                   ref={toolsButtonRef}
                   type="button"
