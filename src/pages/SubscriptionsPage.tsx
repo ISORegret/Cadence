@@ -92,7 +92,7 @@ export function SubscriptionsPage() {
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card">
         <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
           Recurring bills
         </h3>
@@ -108,44 +108,43 @@ export function SubscriptionsPage() {
             .
           </p>
         ) : (
-          <table className="mt-4 w-full min-w-[700px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                <th className="py-2 pr-3">Name</th>
-                <th className="py-2 pr-3">Schedule</th>
-                <th className="py-2 pr-3 text-right">Amount</th>
-                <th className="py-2 pr-3 text-right">Monthly eq.</th>
-                <th className="py-2 text-right">Annual eq.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recurringRows.map(({ bill, monthlyEq }) => (
-                <tr
-                  key={bill.id}
-                  className="border-b border-slate-100 dark:border-slate-800"
-                >
-                  <td className="py-2.5 pr-3 font-medium text-slate-800 dark:text-slate-200">
-                    {bill.name}
-                    {bill.category ? (
-                      <span className="ml-2 text-xs font-normal text-slate-500">
-                        {bill.category}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="py-2.5 pr-3 text-slate-600 dark:text-slate-400">
-                    {scheduleShort(bill.schedule)}
-                  </td>
-                  <td className="py-2.5 pr-3 text-right tabular-nums">{money(bill.amount)}</td>
-                  <td className="py-2.5 pr-3 text-right tabular-nums font-medium">
-                    {money(monthlyEq ?? 0)}
-                  </td>
-                  <td className="py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-400">
-                    {money((monthlyEq ?? 0) * 12)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="mt-4 space-y-3">
+            {recurringRows.map(({ bill, monthlyEq }) => (
+              <li
+                key={bill.id}
+                className="rounded-xl border border-slate-200/80 bg-white/80 px-3 py-3 dark:border-white/10 dark:bg-zinc-900/40"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {bill.name}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      {scheduleShort(bill.schedule)}
+                      {bill.category ? ` · ${bill.category}` : ''}
+                    </p>
+                  </div>
+                  <p className="shrink-0 tabular-nums text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {money(bill.amount)}
+                  </p>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-2 py-1.5 dark:border-white/10 dark:bg-zinc-900/50">
+                    <p className="font-medium text-slate-500 dark:text-slate-400">Monthly eq.</p>
+                    <p className="mt-0.5 tabular-nums text-sm text-slate-800 dark:text-slate-200">
+                      {money(monthlyEq ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200/80 bg-slate-50/80 px-2 py-1.5 dark:border-white/10 dark:bg-zinc-900/50">
+                    <p className="font-medium text-slate-500 dark:text-slate-400">Annual eq.</p>
+                    <p className="mt-0.5 tabular-nums text-sm text-slate-800 dark:text-slate-200">
+                      {money((monthlyEq ?? 0) * 12)}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
