@@ -343,27 +343,27 @@ export function SettingsPage() {
     typeof paySettings?.incomeSecondPaycheck === 'number'
       ? String(paySettings.incomeSecondPaycheck)
       : ''
-  const psLegacy = paySettings as PaySettings & {
+  const psLegacy = paySettings as (PaySettings & {
     bankBalanceAnchorDate?: string | null
     bankBalanceAnchorAmount?: number | null
     startingBalance?: number | null
-  }
+  }) | null
   const startingFundsDateDefault =
     paySettings?.startingFundsDate ??
-    psLegacy.bankBalanceAnchorDate ??
+    psLegacy?.bankBalanceAnchorDate ??
     preferences.bankBalanceAnchorDate ??
     ''
   const startingFundsAmountDefault = (() => {
     if (typeof paySettings?.startingFundsAmount === 'number') {
       return String(paySettings.startingFundsAmount)
     }
-    if (typeof psLegacy.bankBalanceAnchorAmount === 'number') {
+    if (typeof psLegacy?.bankBalanceAnchorAmount === 'number') {
       return String(psLegacy.bankBalanceAnchorAmount)
     }
     if (typeof preferences.bankBalanceAnchorAmount === 'number') {
       return String(preferences.bankBalanceAnchorAmount)
     }
-    if (typeof psLegacy.startingBalance === 'number') {
+    if (typeof psLegacy?.startingBalance === 'number') {
       return String(psLegacy.startingBalance)
     }
     return ''
