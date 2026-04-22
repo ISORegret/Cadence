@@ -49,14 +49,6 @@ function IconCog({ className = 'size-[1.05rem]' }: { className?: string }) {
   )
 }
 
-function IconHome({ className = 'size-[1.05rem]' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z" />
-    </svg>
-  )
-}
-
 function IconLayoutGrid({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -121,14 +113,6 @@ function IconArrowUpTray({ className = 'size-[1.15rem] shrink-0' }: { className?
   )
 }
 
-function IconBell({ className = 'size-[1.15rem] shrink-0' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-    </svg>
-  )
-}
-
 const PRIMARY_NAV_ITEMS = [
   { to: '/', label: 'Summary', icon: IconLayoutGrid },
   { to: '/calendar', label: 'Calendar', icon: IconCalendar },
@@ -143,8 +127,6 @@ const TOOL_NAV_ITEMS = [
   { to: '/import', label: 'Bank import', icon: IconArrowUpTray },
 ] as const
 
-const ALERTS_NAV_ITEM = { to: '/settings#alerts', label: 'Alerts', icon: IconBell } as const
-
 const ROUTE_TITLE_LOOKUP = new Map<string, string>([
   ...PRIMARY_NAV_ITEMS.map(({ to, label }) => [to, label] as const),
   ...TOOL_NAV_ITEMS.map(({ to, label }) => [to, label] as const),
@@ -152,18 +134,13 @@ const ROUTE_TITLE_LOOKUP = new Map<string, string>([
 ])
 
 const TOOL_PATHS = new Set<string>(TOOL_NAV_ITEMS.map(({ to }) => to))
-const TOOLS_MENU_ITEMS = [...TOOL_NAV_ITEMS, ALERTS_NAV_ITEM] as const
 
-function isToolsSection(pathname: string, hash: string): boolean {
-  return TOOL_PATHS.has(pathname) || (pathname === '/settings' && hash === '#alerts')
+function isToolsSection(pathname: string): boolean {
+  return TOOL_PATHS.has(pathname)
 }
 
-function isSettingsMain(pathname: string, hash: string): boolean {
-  return pathname === '/settings' && hash !== '#alerts'
-}
-
-function isAlertsActive(pathname: string, hash: string): boolean {
-  return pathname === '/settings' && hash === '#alerts'
+function isSettingsMain(pathname: string): boolean {
+  return pathname === '/settings'
 }
 
 const MENU_MIN_WIDTH = 200
@@ -219,7 +196,7 @@ function MobileRouteContext() {
 
 export function Layout() {
   const location = useLocation()
-  const { pathname, hash } = location
+  const { pathname } = location
   const theme = useFinanceStore((s) => s.preferences.theme)
   const setPreferences = useFinanceStore((s) => s.setPreferences)
   const { standing } = useCadenceHealth()
@@ -283,9 +260,8 @@ export function Layout() {
     return () => window.clearTimeout(id)
   }, [location.pathname, location.hash])
 
-  const toolsActive = isToolsSection(pathname, hash)
-  const settingsActive = isSettingsMain(pathname, hash)
-  const summaryActive = pathname === '/'
+  const toolsActive = isToolsSection(pathname)
+  const settingsActive = isSettingsMain(pathname)
 
   const toolsMenu =
     toolsOpen && menuPos
@@ -301,7 +277,7 @@ export function Layout() {
             }}
             className="max-h-[min(70vh,24rem)] min-w-[12.5rem] overflow-y-auto overscroll-contain rounded-xl border border-slate-200/90 bg-white py-1 shadow-xl shadow-slate-900/25 dark:border-white/10 dark:bg-zinc-900 dark:shadow-black/60"
           >
-            {TOOLS_MENU_ITEMS.map(({ to, label }) => (
+            {TOOL_NAV_ITEMS.map(({ to, label }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -391,13 +367,6 @@ export function Layout() {
 
           <div className="flex-1 min-h-2" aria-hidden />
 
-          <NavLink
-            to="/settings#alerts"
-            className={() => sidebarNavClass(isAlertsActive(pathname, hash))}
-          >
-            <IconBell />
-            Alerts
-          </NavLink>
           <NavLink to="/settings" className={() => sidebarNavClass(settingsActive)}>
             <IconCog className="size-[1.15rem] shrink-0" />
             Settings
@@ -452,14 +421,6 @@ export function Layout() {
                 >
                   <IconCog />
                 </NavLink>
-                <Link
-                  to="/"
-                  className={iconPill(summaryActive)}
-                  aria-label="Home — Summary"
-                  title="Home (Summary)"
-                >
-                  <IconHome />
-                </Link>
               </div>
             </nav>
             <div className="mt-2 flex flex-col items-center gap-1 px-1">

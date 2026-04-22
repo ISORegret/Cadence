@@ -76,6 +76,7 @@ export function SettingsPage() {
   const [txAmount, setTxAmount] = useState('')
   const [txDir, setTxDir] = useState<'to_savings' | 'from_savings'>('to_savings')
   const [txNote, setTxNote] = useState('')
+  const [advancedOpen, setAdvancedOpen] = useState(() => location.hash === '#alerts')
 
   const showExportBanner = (kind: 'success' | 'error', message: string) => {
     if (exportBannerClearTimer.current) {
@@ -100,6 +101,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (location.hash !== '#alerts') return
+    setAdvancedOpen(true)
     const t = window.setTimeout(() => {
       document.getElementById('alerts')?.scrollIntoView({
         behavior: 'smooth',
@@ -111,6 +113,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (location.hash !== '#savings-account') return
+    setAdvancedOpen(true)
     const timer = window.setTimeout(() => {
       document.getElementById('savings-account')?.scrollIntoView({
         behavior: 'smooth',
@@ -623,477 +626,504 @@ export function SettingsPage() {
         </button>
       </form>
 
-      <div id="savings-account" className="card scroll-mt-20">
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-          Checking ↔ savings transfers
-        </h3>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          <span className="font-medium text-slate-700 dark:text-slate-300">To savings</span> moves cash out
-          of checking; <span className="font-medium text-slate-700 dark:text-slate-300">From savings</span>{' '}
-          moves it back. Set your savings baseline in the pay schedule form above.
-        </p>
-        <div className="mt-4 flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-            Date
-            <input
-              type="date"
-              value={txDate}
-              onChange={(e) => setTxDate(e.target.value)}
-              className="input-field !py-2 text-sm"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-            Amount
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              value={txAmount}
-              onChange={(e) => setTxAmount(e.target.value)}
-              placeholder="0"
-              className="input-field w-28 !py-2 text-sm"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-            Direction
-            <select
-              value={txDir}
-              onChange={(e) =>
-                setTxDir(e.target.value as 'to_savings' | 'from_savings')
-              }
-              className="select-field !py-2 text-sm"
+      <details className="card" open={advancedOpen}>
+        <summary className="cursor-pointer list-none">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+                Advanced setup
+              </h3>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                Optional tools for envelopes, transfers, goals, and extra income.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+              onClick={(e) => {
+                e.preventDefault()
+                setAdvancedOpen((v) => !v)
+              }}
             >
-              <option value="to_savings">To savings</option>
-              <option value="from_savings">From savings</option>
-            </select>
-          </label>
-          <label className="flex min-w-[8rem] flex-1 flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-            Note (optional)
-            <input
-              value={txNote}
-              onChange={(e) => setTxNote(e.target.value)}
-              className="input-field !py-2 text-sm"
-            />
-          </label>
-          <button
-            type="button"
-            className="btn-solid self-end"
-            onClick={() => {
-              const amt = Number(txAmount)
-              if (!txDate.trim() || !Number.isFinite(amt) || amt <= 0) return
-              addSavingsAccountTransfer({
-                date: txDate.trim(),
-                amount: amt,
-                direction: txDir,
-                note: txNote.trim() || undefined,
-              })
-              setTxAmount('')
-              setTxNote('')
-            }}
-          >
-            Add transfer
-          </button>
-        </div>
-        {savingsAccountTransfers.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">No transfers yet.</p>
-        ) : (
-          <ul className="mt-4 space-y-2 text-sm">
-            {[...savingsAccountTransfers]
-              .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id))
-              .map((t) => (
+              {advancedOpen ? 'Hide' : 'Show'}
+            </button>
+          </div>
+        </summary>
+
+        <div className="mt-4 space-y-10">
+          <div id="savings-account" className="card scroll-mt-20">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+              Checking ↔ savings transfers
+            </h3>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              <span className="font-medium text-slate-700 dark:text-slate-300">To savings</span> moves cash out
+              of checking; <span className="font-medium text-slate-700 dark:text-slate-300">From savings</span>{' '}
+              moves it back. Set your savings baseline in the pay schedule form above.
+            </p>
+            <div className="mt-4 flex flex-wrap items-end gap-2">
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                Date
+                <input
+                  type="date"
+                  value={txDate}
+                  onChange={(e) => setTxDate(e.target.value)}
+                  className="input-field !py-2 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                Amount
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={txAmount}
+                  onChange={(e) => setTxAmount(e.target.value)}
+                  placeholder="0"
+                  className="input-field w-28 !py-2 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                Direction
+                <select
+                  value={txDir}
+                  onChange={(e) =>
+                    setTxDir(e.target.value as 'to_savings' | 'from_savings')
+                  }
+                  className="select-field !py-2 text-sm"
+                >
+                  <option value="to_savings">To savings</option>
+                  <option value="from_savings">From savings</option>
+                </select>
+              </label>
+              <label className="flex min-w-[8rem] flex-1 flex-col gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                Note (optional)
+                <input
+                  value={txNote}
+                  onChange={(e) => setTxNote(e.target.value)}
+                  className="input-field !py-2 text-sm"
+                />
+              </label>
+              <button
+                type="button"
+                className="btn-solid self-end"
+                onClick={() => {
+                  const amt = Number(txAmount)
+                  if (!txDate.trim() || !Number.isFinite(amt) || amt <= 0) return
+                  addSavingsAccountTransfer({
+                    date: txDate.trim(),
+                    amount: amt,
+                    direction: txDir,
+                    note: txNote.trim() || undefined,
+                  })
+                  setTxAmount('')
+                  setTxNote('')
+                }}
+              >
+                Add transfer
+              </button>
+            </div>
+            {savingsAccountTransfers.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-500">No transfers yet.</p>
+            ) : (
+              <ul className="mt-4 space-y-2 text-sm">
+                {[...savingsAccountTransfers]
+                  .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id))
+                  .map((t) => (
+                    <li
+                      key={t.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-800"
+                    >
+                      <span className="text-slate-700 dark:text-slate-300">
+                        {t.date}{' '}
+                        <span className="font-medium">
+                          {t.direction === 'to_savings' ? '→ Savings' : '← From savings'}
+                        </span>
+                        {t.note ? (
+                          <span className="text-slate-500"> — {t.note}</span>
+                        ) : null}
+                      </span>
+                      <span className="flex items-center gap-2 tabular-nums">
+                        {formatMoney(t.amount, paySettings)}
+                        <button
+                          type="button"
+                          className="text-xs text-red-600 dark:text-red-400"
+                          onClick={() => removeSavingsAccountTransfer(t.id)}
+                        >
+                          Remove
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="card">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+              Envelopes
+            </h3>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              Optional groups for bills (e.g. “Fixed”, “Fun”). Filter on Summary.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <input
+                value={envName}
+                onChange={(e) => setEnvName(e.target.value)}
+                placeholder="New envelope name"
+                className="input-field min-w-[12rem] flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!envName.trim()) return
+                  addEnvelope(envName)
+                  setEnvName('')
+                }}
+                className="btn-solid"
+              >
+                Add
+              </button>
+            </div>
+            <ul className="mt-4 space-y-2">
+              {envelopes.map((e) => (
                 <li
-                  key={t.id}
+                  key={e.id}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-800"
                 >
-                  <span className="text-slate-700 dark:text-slate-300">
-                    {t.date}{' '}
-                    <span className="font-medium">
-                      {t.direction === 'to_savings' ? '→ Savings' : '← From savings'}
-                    </span>
-                    {t.note ? (
-                      <span className="text-slate-500"> — {t.note}</span>
-                    ) : null}
-                  </span>
-                  <span className="flex items-center gap-2 tabular-nums">
-                    {formatMoney(t.amount, paySettings)}
-                    <button
-                      type="button"
-                      className="text-xs text-red-600 dark:text-red-400"
-                      onClick={() => removeSavingsAccountTransfer(t.id)}
-                    >
-                      Remove
-                    </button>
-                  </span>
-                </li>
-              ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="card">
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-          Envelopes
-        </h3>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Optional groups for bills (e.g. “Fixed”, “Fun”). Filter on Summary.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <input
-            value={envName}
-            onChange={(e) => setEnvName(e.target.value)}
-            placeholder="New envelope name"
-            className="input-field min-w-[12rem] flex-1"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (!envName.trim()) return
-              addEnvelope(envName)
-              setEnvName('')
-            }}
-            className="btn-solid"
-          >
-            Add
-          </button>
-        </div>
-        <ul className="mt-4 space-y-2">
-          {envelopes.map((e) => (
-            <li
-              key={e.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-800"
-            >
-              <input
-                defaultValue={e.name}
-                onBlur={(ev) => renameEnvelope(e.id, ev.target.value)}
-                className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm hover:border-slate-300 dark:hover:border-slate-600"
-              />
-              <button
-                type="button"
-                onClick={() => removeEnvelope(e.id)}
-                className="text-xs text-red-600 dark:text-red-400"
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="card">
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-          Extra income (side gigs)
-        </h3>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Added to take-home on Summary for this pay period (all lines summed).
-        </p>
-        <form
-          className="mt-4 flex flex-wrap gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const fd = new FormData(e.currentTarget)
-            const label = String(fd.get('ilLabel') || '').trim()
-            const amount = Number(fd.get('ilAmount'))
-            if (!label || Number.isNaN(amount) || amount < 0) return
-            addIncomeLine({ label, amount })
-            e.currentTarget.reset()
-          }}
-        >
-          <input
-            name="ilLabel"
-            placeholder="Label"
-            className="input-field min-w-[8rem] flex-1"
-          />
-          <input
-            name="ilAmount"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="Amount"
-            className="input-field w-28"
-          />
-          <button
-            type="submit"
-            className="btn-solid !py-1.5 text-sm"
-          >
-            Add
-          </button>
-        </form>
-        <ul className="mt-4 space-y-2">
-          {incomeLines.map((line) => (
-            <li
-              key={line.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-800"
-            >
-              <input
-                defaultValue={line.label}
-                onBlur={(ev) =>
-                  updateIncomeLine(line.id, { label: ev.target.value.trim() })
-                }
-                className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm hover:border-slate-300 dark:hover:border-slate-600"
-              />
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={line.amount}
-                onBlur={(ev) => {
-                  const n = Number(ev.target.value)
-                  if (!Number.isNaN(n) && n >= 0)
-                    updateIncomeLine(line.id, { amount: n })
-                }}
-                className="w-28 rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-              />
-              <button
-                type="button"
-                onClick={() => removeIncomeLine(line.id)}
-                className="text-xs text-red-600 dark:text-red-400"
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="card">
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-          Savings goals
-        </h3>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Track progress manually — not linked to envelopes or bills.
-        </p>
-        <form
-          className="mt-4 flex flex-wrap gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const fd = new FormData(e.currentTarget)
-            const name = String(fd.get('sgName') || '').trim()
-            const targetAmount = Number(fd.get('sgTarget'))
-            const savedAmount = Number(fd.get('sgSaved') || '0')
-            if (!name || Number.isNaN(targetAmount) || targetAmount < 0) return
-            addSavingsGoal({
-              name,
-              targetAmount,
-              savedAmount: Number.isNaN(savedAmount) ? 0 : Math.max(0, savedAmount),
-            })
-            e.currentTarget.reset()
-          }}
-        >
-          <input
-            name="sgName"
-            placeholder="Goal name"
-            className="input-field min-w-[8rem] flex-1"
-          />
-          <input
-            name="sgTarget"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="Target"
-            className="input-field w-24"
-          />
-          <input
-            name="sgSaved"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="Saved"
-            className="input-field w-24"
-          />
-          <button
-            type="submit"
-            className="btn-solid !py-1.5 text-sm"
-          >
-            Add
-          </button>
-        </form>
-        <ul className="mt-4 space-y-3">
-          {savingsGoals.map((g) => {
-            const pct =
-              g.targetAmount > 0
-                ? Math.min(100, Math.round((g.savedAmount / g.targetAmount) * 100))
-                : 0
-            return (
-              <li
-                key={g.id}
-                className="rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-800"
-              >
-                <div className="flex flex-wrap items-center gap-2">
                   <input
-                    defaultValue={g.name}
-                    onBlur={(ev) =>
-                      updateSavingsGoal(g.id, { name: ev.target.value.trim() })
-                    }
-                    className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium hover:border-slate-300 dark:hover:border-slate-600"
+                    defaultValue={e.name}
+                    onBlur={(ev) => renameEnvelope(e.id, ev.target.value)}
+                    className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm hover:border-slate-300 dark:hover:border-slate-600"
                   />
                   <button
                     type="button"
-                    onClick={() => removeSavingsGoal(g.id)}
+                    onClick={() => removeEnvelope(e.id)}
                     className="text-xs text-red-600 dark:text-red-400"
                   >
                     Remove
                   </button>
-                </div>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <label className="text-xs text-slate-500">
-                    Target
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={g.targetAmount}
-                      onBlur={(ev) => {
-                        const n = Number(ev.target.value)
-                        if (!Number.isNaN(n) && n >= 0)
-                          updateSavingsGoal(g.id, { targetAmount: n })
-                      }}
-                      className="mt-0.5 w-full rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-                    />
-                  </label>
-                  <label className="text-xs text-slate-500">
-                    Saved
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={g.savedAmount}
-                      onBlur={(ev) => {
-                        const n = Number(ev.target.value)
-                        if (!Number.isNaN(n) && n >= 0)
-                          updateSavingsGoal(g.id, { savedAmount: n })
-                      }}
-                      className="mt-0.5 w-full rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-                    />
-                  </label>
-                </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div
-                    className="h-full rounded-full bg-emerald-500 transition-[width]"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-                <p className="mt-1 text-xs text-slate-500">{pct}% of target</p>
-              </li>
-            )
-          })}
-        </ul>
-      </div>
-
-      <div className="card">
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-          Envelope transfers (record-only)
-        </h3>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Log moves between envelopes — does not change bill or expense math.
-        </p>
-        <form
-          className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const fd = new FormData(e.currentTarget)
-            const date = String(fd.get('etDate') || '')
-            const amount = Number(fd.get('etAmount'))
-            const fromEnvelopeId = String(fd.get('etFrom') || '')
-            const toEnvelopeId = String(fd.get('etTo') || '')
-            const note = String(fd.get('etNote') || '').trim()
-            if (
-              !date ||
-              Number.isNaN(amount) ||
-              amount <= 0 ||
-              !fromEnvelopeId ||
-              !toEnvelopeId ||
-              fromEnvelopeId === toEnvelopeId
-            )
-              return
-            addEnvelopeTransfer({
-              date,
-              amount,
-              fromEnvelopeId,
-              toEnvelopeId,
-              note: note || undefined,
-            })
-            e.currentTarget.reset()
-          }}
-        >
-          <input
-            name="etDate"
-            type="date"
-            defaultValue={new Date().toISOString().slice(0, 10)}
-            className="input-field"
-          />
-          <input
-            name="etAmount"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="Amount"
-            className="input-field w-28"
-          />
-          <select
-            name="etFrom"
-            className="select-field min-w-[8rem] !py-1.5 text-sm"
-          >
-            <option value="">From envelope</option>
-            {envelopes.map((ev) => (
-              <option key={ev.id} value={ev.id}>
-                {ev.name}
-              </option>
-            ))}
-          </select>
-          <select
-            name="etTo"
-            className="select-field min-w-[8rem] !py-1.5 text-sm"
-          >
-            <option value="">To envelope</option>
-            {envelopes.map((ev) => (
-              <option key={ev.id} value={ev.id}>
-                {ev.name}
-              </option>
-            ))}
-          </select>
-          <input
-            name="etNote"
-            placeholder="Note (optional)"
-            className="input-field min-w-[8rem] flex-1"
-          />
-          <button
-            type="submit"
-            className="btn-solid !py-1.5 text-sm"
-          >
-            Record
-          </button>
-        </form>
-        <ul className="mt-4 space-y-2 text-sm">
-          {envelopeTransfers
-            .slice()
-            .sort((a, b) => b.date.localeCompare(a.date))
-            .map((t) => {
-              const fromN = envelopes.find((e) => e.id === t.fromEnvelopeId)?.name
-              const toN = envelopes.find((e) => e.id === t.toEnvelopeId)?.name
-              return (
-                <li
-                  key={t.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800"
-                >
-                  <span className="text-slate-600 dark:text-slate-400">
-                    {t.date}: {fromN ?? '?'} → {toN ?? '?'}
-                    {t.note ? ` — ${t.note}` : ''}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className="tabular-nums">{formatMoney(t.amount, paySettings)}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeEnvelopeTransfer(t.id)}
-                      className="text-xs text-red-600 dark:text-red-400"
-                    >
-                      Remove
-                    </button>
-                  </span>
                 </li>
-              )
-            })}
-        </ul>
-      </div>
+              ))}
+            </ul>
+          </div>
+
+          <div className="card">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+              Extra income (side gigs)
+            </h3>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              Added to take-home on Summary for this pay period (all lines summed).
+            </p>
+            <form
+              className="mt-4 flex flex-wrap gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const fd = new FormData(e.currentTarget)
+                const label = String(fd.get('ilLabel') || '').trim()
+                const amount = Number(fd.get('ilAmount'))
+                if (!label || Number.isNaN(amount) || amount < 0) return
+                addIncomeLine({ label, amount })
+                e.currentTarget.reset()
+              }}
+            >
+              <input
+                name="ilLabel"
+                placeholder="Label"
+                className="input-field min-w-[8rem] flex-1"
+              />
+              <input
+                name="ilAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Amount"
+                className="input-field w-28"
+              />
+              <button
+                type="submit"
+                className="btn-solid !py-1.5 text-sm"
+              >
+                Add
+              </button>
+            </form>
+            <ul className="mt-4 space-y-2">
+              {incomeLines.map((line) => (
+                <li
+                  key={line.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-800"
+                >
+                  <input
+                    defaultValue={line.label}
+                    onBlur={(ev) =>
+                      updateIncomeLine(line.id, { label: ev.target.value.trim() })
+                    }
+                    className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm hover:border-slate-300 dark:hover:border-slate-600"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    defaultValue={line.amount}
+                    onBlur={(ev) => {
+                      const n = Number(ev.target.value)
+                      if (!Number.isNaN(n) && n >= 0)
+                        updateIncomeLine(line.id, { amount: n })
+                    }}
+                    className="w-28 rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeIncomeLine(line.id)}
+                    className="text-xs text-red-600 dark:text-red-400"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="card">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+              Savings goals
+            </h3>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              Track progress manually — not linked to envelopes or bills.
+            </p>
+            <form
+              className="mt-4 flex flex-wrap gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const fd = new FormData(e.currentTarget)
+                const name = String(fd.get('sgName') || '').trim()
+                const targetAmount = Number(fd.get('sgTarget'))
+                const savedAmount = Number(fd.get('sgSaved') || '0')
+                if (!name || Number.isNaN(targetAmount) || targetAmount < 0) return
+                addSavingsGoal({
+                  name,
+                  targetAmount,
+                  savedAmount: Number.isNaN(savedAmount) ? 0 : Math.max(0, savedAmount),
+                })
+                e.currentTarget.reset()
+              }}
+            >
+              <input
+                name="sgName"
+                placeholder="Goal name"
+                className="input-field min-w-[8rem] flex-1"
+              />
+              <input
+                name="sgTarget"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Target"
+                className="input-field w-24"
+              />
+              <input
+                name="sgSaved"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Saved"
+                className="input-field w-24"
+              />
+              <button
+                type="submit"
+                className="btn-solid !py-1.5 text-sm"
+              >
+                Add
+              </button>
+            </form>
+            <ul className="mt-4 space-y-3">
+              {savingsGoals.map((g) => {
+                const pct =
+                  g.targetAmount > 0
+                    ? Math.min(100, Math.round((g.savedAmount / g.targetAmount) * 100))
+                    : 0
+                return (
+                  <li
+                    key={g.id}
+                    className="rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-800"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        defaultValue={g.name}
+                        onBlur={(ev) =>
+                          updateSavingsGoal(g.id, { name: ev.target.value.trim() })
+                        }
+                        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium hover:border-slate-300 dark:hover:border-slate-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeSavingsGoal(g.id)}
+                        className="text-xs text-red-600 dark:text-red-400"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <label className="text-xs text-slate-500">
+                        Target
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          defaultValue={g.targetAmount}
+                          onBlur={(ev) => {
+                            const n = Number(ev.target.value)
+                            if (!Number.isNaN(n) && n >= 0)
+                              updateSavingsGoal(g.id, { targetAmount: n })
+                          }}
+                          className="mt-0.5 w-full rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        />
+                      </label>
+                      <label className="text-xs text-slate-500">
+                        Saved
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          defaultValue={g.savedAmount}
+                          onBlur={(ev) => {
+                            const n = Number(ev.target.value)
+                            if (!Number.isNaN(n) && n >= 0)
+                              updateSavingsGoal(g.id, { savedAmount: n })
+                          }}
+                          className="mt-0.5 w-full rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-[width]"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">{pct}% of target</p>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+
+          <div className="card">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+              Envelope transfers (record-only)
+            </h3>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              Log moves between envelopes — does not change bill or expense math.
+            </p>
+            <form
+              className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const fd = new FormData(e.currentTarget)
+                const date = String(fd.get('etDate') || '')
+                const amount = Number(fd.get('etAmount'))
+                const fromEnvelopeId = String(fd.get('etFrom') || '')
+                const toEnvelopeId = String(fd.get('etTo') || '')
+                const note = String(fd.get('etNote') || '').trim()
+                if (
+                  !date ||
+                  Number.isNaN(amount) ||
+                  amount <= 0 ||
+                  !fromEnvelopeId ||
+                  !toEnvelopeId ||
+                  fromEnvelopeId === toEnvelopeId
+                )
+                  return
+                addEnvelopeTransfer({
+                  date,
+                  amount,
+                  fromEnvelopeId,
+                  toEnvelopeId,
+                  note: note || undefined,
+                })
+                e.currentTarget.reset()
+              }}
+            >
+              <input
+                name="etDate"
+                type="date"
+                defaultValue={new Date().toISOString().slice(0, 10)}
+                className="input-field"
+              />
+              <input
+                name="etAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Amount"
+                className="input-field w-28"
+              />
+              <select
+                name="etFrom"
+                className="select-field min-w-[8rem] !py-1.5 text-sm"
+              >
+                <option value="">From envelope</option>
+                {envelopes.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                name="etTo"
+                className="select-field min-w-[8rem] !py-1.5 text-sm"
+              >
+                <option value="">To envelope</option>
+                {envelopes.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                name="etNote"
+                placeholder="Note (optional)"
+                className="input-field min-w-[8rem] flex-1"
+              />
+              <button
+                type="submit"
+                className="btn-solid !py-1.5 text-sm"
+              >
+                Record
+              </button>
+            </form>
+            <ul className="mt-4 space-y-2 text-sm">
+              {envelopeTransfers
+                .slice()
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .map((t) => {
+                  const fromN = envelopes.find((e) => e.id === t.fromEnvelopeId)?.name
+                  const toN = envelopes.find((e) => e.id === t.toEnvelopeId)?.name
+                  return (
+                    <li
+                      key={t.id}
+                      className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800"
+                    >
+                      <span className="text-slate-600 dark:text-slate-400">
+                        {t.date}: {fromN ?? '?'} → {toN ?? '?'}
+                        {t.note ? ` — ${t.note}` : ''}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="tabular-nums">{formatMoney(t.amount, paySettings)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeEnvelopeTransfer(t.id)}
+                          className="text-xs text-red-600 dark:text-red-400"
+                        >
+                          Remove
+                        </button>
+                      </span>
+                    </li>
+                  )
+                })}
+            </ul>
+          </div>
+        </div>
+      </details>
 
       <div className="card">
         <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
