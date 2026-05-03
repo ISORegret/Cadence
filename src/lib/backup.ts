@@ -139,6 +139,7 @@ function isBill(x: unknown): x is Bill {
   if ('recurrence' in b && b.recurrence !== undefined && !isBillRecurrence(b.recurrence)) {
     return false
   }
+  if (b.startDate !== undefined && typeof b.startDate !== 'string') return false
   if (b.note !== undefined && typeof b.note !== 'string') return false
   if (b.category !== undefined && typeof b.category !== 'string') return false
   if (b.envelopeId !== undefined && typeof b.envelopeId !== 'string') return false
@@ -166,6 +167,7 @@ function isBillAppendEntry(x: unknown): x is Omit<Bill, 'id'> {
     return false
   }
   if (b.recurrence !== undefined && !isBillRecurrence(b.recurrence)) return false
+  if (b.startDate !== undefined && typeof b.startDate !== 'string') return false
   if (b.note !== undefined && typeof b.note !== 'string') return false
   if (b.category !== undefined && typeof b.category !== 'string') return false
   if (b.envelopeId !== undefined && typeof b.envelopeId !== 'string') return false

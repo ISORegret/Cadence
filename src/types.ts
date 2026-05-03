@@ -53,6 +53,11 @@ export interface Bill {
   id: string
   name: string
   amount: number
+  /**
+   * First day this recurring bill should exist in projections.
+   * Prevents new bills from being backfilled into older months/periods.
+   */
+  startDate?: string
   /** Amount already set aside for this bill. Used to reduce upcoming due totals. */
   savedAmount?: number
   /**

@@ -214,10 +214,19 @@ export function BillsPage() {
     }
 
     const amountIsEstimate = fd.get('amountIsEstimate') === 'on'
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const startDate =
+      schedule.kind === 'once'
+        ? undefined
+        : editingId
+          ? editing?.startDate ??
+            (editing?.schedule.kind === 'once' ? todayIso : undefined)
+          : todayIso
     const meta = {
       note,
       category,
       envelopeId,
+      startDate,
       savedAmount,
       payFrom,
       confidence: amountIsEstimate ? ('estimate' as const) : undefined,
@@ -277,6 +286,10 @@ export function BillsPage() {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Add or edit money that leaves your account. Set loans to end after a
           number of payments or on a last date; otherwise they stay ongoing.
+        </p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          New recurring bills start from today by default, so adding one now
+          won’t backfill past months.
         </p>
       </div>
 

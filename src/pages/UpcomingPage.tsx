@@ -14,7 +14,6 @@ import {
   mergeAllOutflowLists,
   paidKeyForOutflow,
   toISODate,
-  totalAmount,
 } from '../lib/payPeriod'
 import type { Bill, ExpenseEntry, OneOffItem, Outflow } from '../types'
 import { PageUndo } from '../components/PageUndo'
@@ -34,11 +33,33 @@ function mergedOutflowsForRange(
   ])
 }
 
+function allocateSavedAmountsByOutflow(
+  flows: Outflow[],
+  billSavedMap: Map<string, number>,
+): Map<string, number> {
+  const usedByBill = new Map<string, number>()
+  const savedByOutflow = new Map<string, number>()
+  for (const o of flows) {
+    if (o.source !== 'bill') continue
+    const available = billSavedMap.get(o.billId) ?? 0
+    if (available <= 0) continue
+    const already = usedByBill.get(o.billId) ?? 0
+    const remain = Math.max(0, available - already)
+    if (remain <= 0) continue
+    const applied = Math.min(remain, o.amount)
+    usedByBill.set(o.billId, already + applied)
+    savedByOutflow.set(paidKeyForOutflow(o), applied)
+  }
+  return savedByOutflow
+}
+
 export function UpcomingPage() {
   const paySettings = useFinanceStore((s) => s.paySettings)
   const bills = useFinanceStore((s) => s.bills)
   const oneOffItems = useFinanceStore((s) => s.oneOffItems)
   const expenseEntries = useFinanceStore((s) => s.expenseEntries)
+  const paidOutflowKeys = useFinanceStore((s) => s.paidOutflowKeys)
+  const togglePaidKey = useFinanceStore((s) => s.togglePaidKey)
 
   const billSavedMap = useMemo(
     () =>
@@ -72,28 +93,41 @@ export function UpcomingPage() {
     )
   }, [bills, oneOffItems, expenseEntries, period])
 
-  const byDate = useMemo(() => groupOutflowsByDate(outflows), [outflows])
   const checkingOutflows = useMemo(
     () => outflows.filter((o) => o.source !== 'bill' || (o.payFrom ?? 'checking') !== 'savings'),
     [outflows],
   )
-  const periodTotal = totalAmount(checkingOutflows)
+  const byDate = useMemo(() => groupOutflowsByDate(checkingOutflows), [checkingOutflows])
+  const savedAppliedByOutflow = useMemo(
+    () => allocateSavedAmountsByOutflow(checkingOutflows, billSavedMap),
+    [checkingOutflows, billSavedMap],
+  )
+  const periodScheduledTotal = useMemo(
+    () =>
+      checkingOutflows.reduce((sum, o) => {
+        const saved = savedAppliedByOutflow.get(paidKeyForOutflow(o)) ?? 0
+        return sum + Math.max(0, o.amount - saved)
+      }, 0),
+    [checkingOutflows, savedAppliedByOutflow],
+  )
+  const periodPaidTotal = useMemo(
+    () =>
+      checkingOutflows.reduce((sum, o) => {
+        const pk = paidKeyForOutflow(o)
+        if (!paidOutflowKeys.includes(pk)) return sum
+        const saved = savedAppliedByOutflow.get(pk) ?? 0
+        return sum + Math.max(0, o.amount - saved)
+      }, 0),
+    [checkingOutflows, paidOutflowKeys, savedAppliedByOutflow],
+  )
   const periodSavedApplied = useMemo(() => {
-    if (!period || checkingOutflows.length === 0) return 0
-    const appliedByBill = new Map<string, number>()
-    for (const o of checkingOutflows) {
-      if (o.source !== 'bill') continue
-      const available = billSavedMap.get(o.billId) ?? 0
-      if (available <= 0) continue
-      const already = appliedByBill.get(o.billId) ?? 0
-      const remain = Math.max(0, available - already)
-      if (remain <= 0) continue
-      const applied = Math.min(remain, o.amount)
-      appliedByBill.set(o.billId, already + applied)
-    }
-    return [...appliedByBill.values()].reduce((s, v) => s + v, 0)
-  }, [period, checkingOutflows, billSavedMap])
-  const periodDueAfterSaved = Math.max(0, periodTotal - periodSavedApplied)
+    return checkingOutflows.reduce((sum, o) => {
+      const pk = paidKeyForOutflow(o)
+      if (paidOutflowKeys.includes(pk)) return sum
+      return sum + (savedAppliedByOutflow.get(pk) ?? 0)
+    }, 0)
+  }, [checkingOutflows, paidOutflowKeys, savedAppliedByOutflow])
+  const periodDueAfterSaved = Math.max(0, periodScheduledTotal - periodPaidTotal)
 
   const paydaysInPeriod = useMemo(() => {
     if (!paySettings || !period) return []
@@ -122,19 +156,19 @@ export function UpcomingPage() {
         oneOffItems,
         expenseEntries,
       )
-      const periodSavedByBill = new Map<string, number>()
-      for (const o of flows) {
-        if (o.source !== 'bill') continue
-        const available = billSavedMap.get(o.billId) ?? 0
-        if (available <= 0) continue
-        const already = periodSavedByBill.get(o.billId) ?? 0
-        const remain = Math.max(0, available - already)
-        if (remain <= 0) continue
-        const applied = Math.min(remain, o.amount)
-        periodSavedByBill.set(o.billId, already + applied)
-      }
-      const savedApplied = [...periodSavedByBill.values()].reduce((s, v) => s + v, 0)
-      const due = Math.max(0, totalAmount(flows) - savedApplied)
+      const checkingFlows = flows.filter(
+        (o) => o.source !== 'bill' || (o.payFrom ?? 'checking') !== 'savings',
+      )
+      const savedByOutflow = allocateSavedAmountsByOutflow(
+        checkingFlows,
+        billSavedMap,
+      )
+      const paid = checkingFlows.reduce((sum, o) => {
+        const pk = paidKeyForOutflow(o)
+        if (!paidOutflowKeys.includes(pk)) return sum
+        const saved = savedByOutflow.get(pk) ?? 0
+        return sum + Math.max(0, o.amount - saved)
+      }, 0)
       const payCount = [
         ...listPaydayDatesInOpenRange(
           p.intervalStart,
@@ -142,7 +176,7 @@ export function UpcomingPage() {
           paySettings,
         ),
       ].length
-      total += payCount * primaryPayAmount - due
+      total += payCount * primaryPayAmount - paid
     }
     return total
   }, [
@@ -154,10 +188,11 @@ export function UpcomingPage() {
     expenseEntries,
     primaryPayAmount,
     billSavedMap,
+    paidOutflowKeys,
   ])
 
   const availableThisPeriod = rolloverBalance + periodIncome
-  const endingRollover = availableThisPeriod - periodDueAfterSaved
+  const endingRollover = availableThisPeriod - periodPaidTotal
 
   const calendarDays = useMemo(() => {
     if (!period) return []
@@ -303,7 +338,7 @@ export function UpcomingPage() {
             </p>
           </div>
           <div className="rounded-lg border border-rose-200/90 bg-rose-50/80 px-3 py-2.5 dark:border-rose-800/50 dark:bg-rose-950/35">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Due this period</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Still due (unpaid)</p>
             <p className="mt-1 tabular-nums text-base font-semibold text-rose-700 dark:text-rose-400">
               {money(periodDueAfterSaved)}
             </p>
@@ -318,6 +353,9 @@ export function UpcomingPage() {
             <p className={`mt-1 tabular-nums text-base font-bold ${netClass(endingRollover)}`}>
               {money(endingRollover)}
             </p>
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              Based on {money(periodPaidTotal)} marked paid this period
+            </p>
           </div>
         </div>
 
@@ -327,7 +365,7 @@ export function UpcomingPage() {
         <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
           By day, in this pay period.
         </p>
-        {outflows.length === 0 ? (
+        {checkingOutflows.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
             Nothing scheduled this period. Add or edit bills on the{' '}
             <Link to="/bills" className="font-medium text-emerald-700 underline dark:text-emerald-400">
@@ -340,8 +378,8 @@ export function UpcomingPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-slate-600 dark:text-slate-400">
                 {daysWithFlows.length} active day{daysWithFlows.length === 1 ? '' : 's'} ·{' '}
-                {outflows.length} outflow{outflows.length === 1 ? '' : 's'} ·{' '}
-                <span className="font-semibold">{money(periodTotal)}</span> scheduled
+                {checkingOutflows.length} outflow{checkingOutflows.length === 1 ? '' : 's'} ·{' '}
+                <span className="font-semibold">{money(periodDueAfterSaved)}</span> currently due
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -363,7 +401,12 @@ export function UpcomingPage() {
 
             <div className="divide-y divide-slate-200/70 overflow-hidden rounded-lg border border-slate-200/80 bg-white/60 dark:divide-white/10 dark:border-white/10 dark:bg-zinc-900/30">
               {daysWithFlows.map(({ iso, day, flows }) => {
-                const daySum = totalAmount(flows)
+                const daySum = flows.reduce((sum, o) => {
+                  const pk = paidKeyForOutflow(o)
+                  if (paidOutflowKeys.includes(pk)) return sum
+                  const saved = savedAppliedByOutflow.get(pk) ?? 0
+                  return sum + Math.max(0, o.amount - saved)
+                }, 0)
                 const isOpen = openDayIsos.includes(iso)
                 return (
                   <details
@@ -395,34 +438,68 @@ export function UpcomingPage() {
                     </summary>
 
                     <ul className="px-3 pb-2">
-                      {flows.map((o) => (
-                        <li
-                          key={paidKeyForOutflow(o)}
-                          className="flex items-start justify-between gap-3 border-t border-slate-200/70 py-1.5 text-sm first:border-t-0 dark:border-white/10"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                              <span className="min-w-0 truncate font-medium text-slate-900 dark:text-slate-100">
-                                {o.name}
-                              </span>
-                              {o.category?.trim() ? (
-                                <span
-                                  className={`inline-flex shrink-0 items-center gap-1.5 text-[11px] ${categoryChipClasses(o.category)}`}
-                                >
+                      {flows.map((o) => {
+                        const pk = paidKeyForOutflow(o)
+                        const paid = paidOutflowKeys.includes(pk)
+                        const saved = savedAppliedByOutflow.get(pk) ?? 0
+                        const net = Math.max(0, o.amount - saved)
+                        return (
+                          <li
+                            key={pk}
+                            className="flex items-start justify-between gap-3 border-t border-slate-200/70 py-1.5 text-sm first:border-t-0 dark:border-white/10"
+                          >
+                            <label className="flex min-w-0 cursor-pointer items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={paid}
+                                onChange={() => togglePaidKey(pk)}
+                                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 dark:border-slate-600"
+                                aria-label={paid ? `Paid: ${o.name}` : `Mark paid: ${o.name}`}
+                              />
+                              <div className="min-w-0">
+                                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                   <span
-                                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${categoryDotClass(o.category)}`}
-                                    aria-hidden
-                                  />
-                                  {o.category}
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                          <p className="shrink-0 tabular-nums text-slate-900 dark:text-slate-100">
-                            {money(o.amount)}
-                          </p>
-                        </li>
-                      ))}
+                                    className={[
+                                      'min-w-0 truncate font-medium',
+                                      paid
+                                        ? 'text-slate-500 line-through dark:text-slate-500'
+                                        : 'text-slate-900 dark:text-slate-100',
+                                    ].join(' ')}
+                                  >
+                                    {o.name}
+                                  </span>
+                                  {o.category?.trim() ? (
+                                    <span
+                                      className={`inline-flex shrink-0 items-center gap-1.5 text-[11px] ${categoryChipClasses(o.category)}`}
+                                    >
+                                      <span
+                                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${categoryDotClass(o.category)}`}
+                                        aria-hidden
+                                      />
+                                      {o.category}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {saved > 0 ? (
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    {money(saved)} covered by saved amount
+                                  </p>
+                                ) : null}
+                              </div>
+                            </label>
+                            <p
+                              className={[
+                                'shrink-0 tabular-nums',
+                                paid
+                                  ? 'text-slate-400 line-through'
+                                  : 'text-slate-900 dark:text-slate-100',
+                              ].join(' ')}
+                            >
+                              {money(net)}
+                            </p>
+                          </li>
+                        )
+                      })}
                     </ul>
                   </details>
                 )

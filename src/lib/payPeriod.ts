@@ -301,9 +301,11 @@ function pushOutflow(
   rs: Date,
   re: Date,
   r: BillRecurrence,
+  startDate: Date | null,
   out: Outflow[],
 ): void {
   if (isBefore(d, rs) || !isBefore(d, re)) return
+  if (startDate && isBefore(d, startDate)) return
   if (!allowsEndOn(r, d)) return
   out.push({
     billId: bill.id,
@@ -328,10 +330,11 @@ function addOutflowsForBill(
   const rs = startOfDay(rangeStart)
   const re = startOfDay(rangeEndExclusive)
   const r = effectiveRecurrence(bill)
+  const startDate = bill.startDate ? parseISODate(bill.startDate) : null
 
   if (schedule.kind === 'once') {
     const d = parseISODate(schedule.date)
-    pushOutflow(bill, d, rs, re, r, out)
+    pushOutflow(bill, d, rs, re, r, startDate, out)
     return
   }
 
@@ -341,7 +344,7 @@ function addOutflowsForBill(
       const F0 = firstMonthlyOnOrAfter(dom, parseISODate(r.seriesStart))
       for (let k = 0; k < r.count; k++) {
         const cand = monthlyPaymentK(F0, dom, k)
-        pushOutflow(bill, cand, rs, re, r, out)
+        pushOutflow(bill, cand, rs, re, r, startDate, out)
       }
       return
     }
@@ -349,7 +352,7 @@ function addOutflowsForBill(
     let m = rs.getMonth()
     for (let i = 0; i < 48; i++) {
       const cand = startOfDay(clampDayOfMonth(y, m, dom))
-      pushOutflow(bill, cand, rs, re, r, out)
+      pushOutflow(bill, cand, rs, re, r, startDate, out)
       if (isBefore(re, cand)) break
       m += 1
       if (m > 11) {
@@ -366,7 +369,7 @@ function addOutflowsForBill(
       const first = firstWeekdayOnOrAfter(dow, parseISODate(r.seriesStart))
       for (let k = 0; k < r.count; k++) {
         const cand = addDays(first, 7 * k)
-        pushOutflow(bill, cand, rs, re, r, out)
+        pushOutflow(bill, cand, rs, re, r, startDate, out)
       }
       return
     }
@@ -374,7 +377,7 @@ function addOutflowsForBill(
     const endGuard = addDays(re, 7)
     while (isBefore(d, re)) {
       if (d.getDay() === dow) {
-        pushOutflow(bill, d, rs, re, r, out)
+        pushOutflow(bill, d, rs, re, r, startDate, out)
       }
       d = addDays(d, 1)
       if (isBefore(endGuard, d)) break
@@ -388,7 +391,7 @@ function addOutflowsForBill(
     if (r.kind === 'endsAfterPayments') {
       for (let k = 0; k < r.count; k++) {
         const cand = addDays(anchor, 14 * k)
-        pushOutflow(bill, cand, rs, re, r, out)
+        pushOutflow(bill, cand, rs, re, r, startDate, out)
       }
       return
     }
@@ -401,7 +404,7 @@ function addOutflowsForBill(
       if (isBefore(d, rs)) d = addDays(d, 14)
     }
     while (isBefore(d, re)) {
-      pushOutflow(bill, d, rs, re, r, out)
+      pushOutflow(bill, d, rs, re, r, startDate, out)
       d = addDays(d, 14)
     }
   }
