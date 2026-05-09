@@ -22,6 +22,7 @@ export function GlobalExperience() {
   const oneOffItems = useFinanceStore((s) => s.oneOffItems)
   const expenseEntries = useFinanceStore((s) => s.expenseEntries)
   const incomeLines = useFinanceStore((s) => s.incomeLines)
+  const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
   const preferences = useFinanceStore((s) => s.preferences)
   const setPreferences = useFinanceStore((s) => s.setPreferences)
 
@@ -72,6 +73,7 @@ export function GlobalExperience() {
       expenseEntries,
       incomeLines,
       legacyPreferences: preferences,
+      savingsAccountTransfers,
     })
   }, [
     paySettings,
@@ -79,6 +81,7 @@ export function GlobalExperience() {
     oneOffItems,
     expenseEntries,
     incomeLines,
+    savingsAccountTransfers,
     preferences,
   ])
 
