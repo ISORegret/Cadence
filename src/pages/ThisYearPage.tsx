@@ -8,8 +8,10 @@ import {
   listOneOffOutflowsInRange,
   listOutflowsInRange,
   mergeAllOutflowLists,
+  toISODate,
   totalAmount,
 } from '../lib/payPeriod'
+import { savingsTransfersToOutflows } from '../lib/savingsAccount'
 import { useFinanceStore } from '../store/financeStore'
 
 /**
@@ -21,6 +23,7 @@ export function ThisYearPage() {
   const oneOffItems = useFinanceStore((s) => s.oneOffItems)
   const expenseEntries = useFinanceStore((s) => s.expenseEntries)
   const incomeLines = useFinanceStore((s) => s.incomeLines)
+  const savingsAccountTransfers = useFinanceStore((s) => s.savingsAccountTransfers)
 
   const money = (n: number) => formatMoney(n, paySettings)
 
@@ -36,18 +39,31 @@ export function ThisYearPage() {
     const oneFlows = listOneOffOutflowsInRange(oneOffItems, todayStart, nextYearJan1)
     /** Forward-only: discretionary spend you already logged with a future date (rare). */
     const expFlowsRemaining = listExpenseOutflowsInRange(expenseEntries, todayStart, nextYearJan1)
+    const todayIso = toISODate(todayStart)
+    const nextYearIso = toISODate(nextYearJan1)
+    const txFlows = savingsTransfersToOutflows(
+      savingsAccountTransfers.filter(
+        (t) => t.date >= todayIso && t.date < nextYearIso,
+      ),
+    )
     /** Jan 1 → end of today: matches “spending I’ve already logged this year.” */
     const expFlowsYtd = listExpenseOutflowsInRange(
       expenseEntries,
       startOfYear(todayStart),
       addDays(todayStart, 1),
     )
-    const merged = mergeAllOutflowLists([billFlows, oneFlows, expFlowsRemaining])
+    const merged = mergeAllOutflowLists([
+      billFlows,
+      oneFlows,
+      expFlowsRemaining,
+      txFlows,
+    ])
 
     const billsTotal = totalAmount(billFlows)
     const oneOffTotal = totalAmount(oneFlows)
     const expenseRemainingTotal = totalAmount(expFlowsRemaining)
     const expenseYtdTotal = totalAmount(expFlowsYtd)
+    const transferNetTotal = totalAmount(txFlows)
     const totalOut = totalAmount(merged)
 
     const incomeEst =
@@ -89,6 +105,7 @@ export function ThisYearPage() {
       oneOffTotal,
       expenseRemainingTotal,
       expenseYtdTotal,
+      transferNetTotal,
       totalOut,
       incomeEst,
       gap,
@@ -96,7 +113,14 @@ export function ThisYearPage() {
       lineCount: merged.length,
       tips,
     }
-  }, [bills, expenseEntries, incomeLines, oneOffItems, paySettings])
+  }, [
+    bills,
+    expenseEntries,
+    incomeLines,
+    oneOffItems,
+    paySettings,
+    savingsAccountTransfers,
+  ])
 
   return (
     <div className="space-y-5 text-left">
@@ -105,8 +129,8 @@ export function ThisYearPage() {
         <h2 className="mt-1 text-xl font-bold text-slate-900 dark:text-white">This year</h2>
         <p className="mt-1 max-w-xl text-sm text-slate-600 dark:text-slate-400">
           From <span className="font-medium text-slate-800 dark:text-slate-200">{pack.dateSpan}</span>: estimated
-          remaining paycheck deposits vs withdrawals already in Cadence (bills, one-offs, quick expenses). Not a bank
-          balance — it’s a plan-to-plan check.
+          remaining paycheck deposits vs withdrawals already in Cadence (bills, one-offs, quick expenses, and savings
+          transfers). Not a bank balance — it’s a plan-to-plan check.
         </p>
       </div>
 
@@ -159,7 +183,7 @@ export function ThisYearPage() {
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Bills vs other (remaining year)
         </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-4">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Bills</p>
             <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-white">
@@ -188,6 +212,17 @@ export function ThisYearPage() {
                 Jan 1–today · forward-dated entries also roll into the total above
               </p>
             )}
+          </div>
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+              Savings transfers (net)
+            </p>
+            <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-white">
+              {money(pack.transferNetTotal)}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              To savings counts as a pull; from savings offsets pulls
+            </p>
           </div>
         </div>
       </div>
