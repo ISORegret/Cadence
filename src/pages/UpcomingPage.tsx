@@ -163,9 +163,8 @@ export function UpcomingPage() {
         checkingFlows,
         billSavedMap,
       )
-      const paid = checkingFlows.reduce((sum, o) => {
+      const scheduled = checkingFlows.reduce((sum, o) => {
         const pk = paidKeyForOutflow(o)
-        if (!paidOutflowKeys.includes(pk)) return sum
         const saved = savedByOutflow.get(pk) ?? 0
         return sum + Math.max(0, o.amount - saved)
       }, 0)
@@ -176,7 +175,7 @@ export function UpcomingPage() {
           paySettings,
         ),
       ].length
-      total += payCount * primaryPayAmount - paid
+      total += payCount * primaryPayAmount - scheduled
     }
     return total
   }, [
@@ -188,11 +187,10 @@ export function UpcomingPage() {
     expenseEntries,
     primaryPayAmount,
     billSavedMap,
-    paidOutflowKeys,
   ])
 
   const availableThisPeriod = rolloverBalance + periodIncome
-  const endingRollover = availableThisPeriod - periodPaidTotal
+  const endingRollover = availableThisPeriod - periodScheduledTotal
 
   const calendarDays = useMemo(() => {
     if (!period) return []
@@ -354,7 +352,7 @@ export function UpcomingPage() {
               {money(endingRollover)}
             </p>
             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-              Based on {money(periodPaidTotal)} marked paid this period
+              After scheduled outflows; {money(periodPaidTotal)} marked paid
             </p>
           </div>
         </div>
