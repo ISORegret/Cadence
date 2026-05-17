@@ -181,9 +181,10 @@ export function BillsPage() {
       payFromRaw === 'savings' || payFromRaw === 'checking'
         ? (payFromRaw as 'checking' | 'savings')
         : 'checking'
-    const savedRaw = Number(fd.get('savedAmount'))
+    const savedValue = fd.get('savedAmount')
+    const savedRaw = savedValue === null ? editing?.savedAmount : Number(savedValue)
     const savedAmount =
-      Number.isFinite(savedRaw) && savedRaw > 0
+      typeof savedRaw === 'number' && Number.isFinite(savedRaw) && savedRaw > 0
         ? Math.max(0, Math.min(amount, savedRaw))
         : 0
 
@@ -343,6 +344,23 @@ export function BillsPage() {
               placeholder="0.00"
               className="input-field mt-1 w-full"
             />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Already saved / set aside
+            </span>
+            <input
+              name="savedAmount"
+              type="number"
+              step="0.01"
+              min="0"
+              defaultValue={editing?.savedAmount ?? 0}
+              placeholder="0.00"
+              className="input-field mt-1 w-full"
+            />
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+              Reduces the cash still due for this bill, capped at the bill amount.
+            </span>
           </label>
           <label className="flex cursor-pointer items-center gap-2 sm:col-span-2">
             <input
