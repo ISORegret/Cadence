@@ -46,9 +46,22 @@ export function projectedSavingsBalanceEndOfDay(
   targetDate: string,
   transfers: SavingsAccountTransfer[],
 ): number {
-  if (targetDate < anchorDate) return anchorBalanceEndOfDay
   if (targetDate === anchorDate) return anchorBalanceEndOfDay
   let balance = anchorBalanceEndOfDay
+  if (targetDate < anchorDate) {
+    const intervalStart = addDays(startOfDay(parseISO(targetDate)), 1)
+    const intervalEnd = startOfDay(parseISO(anchorDate))
+    for (const d of eachDayOfInterval({
+      start: intervalStart,
+      end: intervalEnd,
+    })) {
+      const dayIso = toISODate(d)
+      const { toSavings, fromSavings } =
+        savingsTransferCheckingEffectForDay(dayIso, transfers)
+      balance -= toSavings - fromSavings
+    }
+    return balance
+  }
   const intervalStart = addDays(startOfDay(parseISO(anchorDate)), 1)
   const intervalEnd = startOfDay(parseISO(targetDate))
   for (const d of eachDayOfInterval({

@@ -10,8 +10,8 @@ import {
   listExpenseOutflowsInRange,
   listOneOffOutflowsInRange,
   listOutflowsInRange,
-  listPaydayDatesInOpenRange,
   mergeAllOutflowLists,
+  paydayIncomeInOpenRange,
   paidKeyForOutflow,
   toISODate,
 } from '../lib/payPeriod'
@@ -129,20 +129,16 @@ export function UpcomingPage() {
   }, [checkingOutflows, paidOutflowKeys, savedAppliedByOutflow])
   const periodDueAfterSaved = Math.max(0, periodScheduledTotal - periodPaidTotal)
 
-  const paydaysInPeriod = useMemo(() => {
+  const paydayIncomeRows = useMemo(() => {
     if (!paySettings || !period) return []
-    return [
-      ...listPaydayDatesInOpenRange(
-        period.intervalStart,
-        period.intervalEndExclusive,
-        paySettings,
-      ),
-    ].sort((a, b) => a.localeCompare(b))
+    return paydayIncomeInOpenRange(
+      period.intervalStart,
+      period.intervalEndExclusive,
+      paySettings,
+    )
   }, [paySettings, period])
 
-  const primaryPayAmount =
-    typeof paySettings?.incomePerPaycheck === 'number' ? paySettings.incomePerPaycheck : 0
-  const periodIncome = paydaysInPeriod.length * primaryPayAmount
+  const periodIncome = paydayIncomeRows.reduce((sum, row) => sum + row.amount, 0)
   const rolloverBalance = useMemo(() => {
     if (!period || !paySettings) return 0
     if (periodOffset <= 0) return 0
@@ -169,14 +165,12 @@ export function UpcomingPage() {
         const saved = savedByOutflow.get(pk) ?? 0
         return sum + Math.max(0, o.amount - saved)
       }, 0)
-      const payCount = [
-        ...listPaydayDatesInOpenRange(
-          p.intervalStart,
-          p.intervalEndExclusive,
-          paySettings,
-        ),
-      ].length
-      total += payCount * primaryPayAmount - paid
+      const income = paydayIncomeInOpenRange(
+        p.intervalStart,
+        p.intervalEndExclusive,
+        paySettings,
+      ).reduce((sum, row) => sum + row.amount, 0)
+      total += income - paid
     }
     return total
   }, [
@@ -186,7 +180,6 @@ export function UpcomingPage() {
     bills,
     oneOffItems,
     expenseEntries,
-    primaryPayAmount,
     billSavedMap,
     paidOutflowKeys,
   ])
@@ -293,12 +286,13 @@ export function UpcomingPage() {
         </div>
       </div>
 
-      {paydaysInPeriod.length > 0 ? (
+      {paydayIncomeRows.length > 0 ? (
         <div className="card-tight border border-emerald-200/80 bg-emerald-50/80 text-sm text-emerald-950 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-100">
-          <p className="font-semibold">Paycheck{paydaysInPeriod.length > 1 ? 's' : ''} this period</p>
+          <p className="font-semibold">Paycheck{paydayIncomeRows.length > 1 ? 's' : ''} this period</p>
           <p className="mt-1 text-xs opacity-90">
-            {paydaysInPeriod.map((iso) => format(parseISO(iso), 'EEE MMM d')).join(' · ')} —{' '}
-            using {money(primaryPayAmount)} per paycheck
+            {paydayIncomeRows
+              .map((row) => `${format(parseISO(row.iso), 'EEE MMM d')} (${money(row.amount)})`)
+              .join(' · ')}
           </p>
         </div>
       ) : null}
@@ -313,7 +307,7 @@ export function UpcomingPage() {
             in the title only.
           </p>
         ) : null}
-        {paydaysInPeriod.length === 0 && periodDueAfterSaved > 0 ? (
+        {paydayIncomeRows.length === 0 && periodDueAfterSaved > 0 ? (
           <p className="mt-2 rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-xs leading-snug text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/35 dark:text-amber-100">
             No paycheck dates fell in this pay period for your schedule, so this period uses $0 income
             while due bills may still appear. Check your anchor pay date in{' '}

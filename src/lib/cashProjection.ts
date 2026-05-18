@@ -43,10 +43,39 @@ function mergedDayOutflows(
   ])
 }
 
+function checkingBalanceChangeForDay(
+  day: Date,
+  paySettings: PaySettings,
+  bills: Bill[],
+  oneOffItems: OneOffItem[],
+  expenseEntries: ExpenseEntry[],
+  incomeLines: IncomeLine[],
+  savingsAccountTransfers: SavingsAccountTransfer[],
+): number {
+  const dayStart = startOfDay(day)
+  const dayEnd = addDays(dayStart, 1)
+  const flows = mergedDayOutflows(day, bills, oneOffItems, expenseEntries)
+  const out = totalAmount(flows)
+  const th = estimatedTakeHomeInRange(
+    dayStart,
+    dayEnd,
+    paySettings,
+    incomeLines,
+  )
+  const inc = th ? th.total : 0
+  const { toSavings, fromSavings } = savingsTransferCheckingEffectForDay(
+    toISODate(day),
+    savingsAccountTransfers,
+  )
+  return inc - out - toSavings + fromSavings
+}
+
 /**
  * Balance at end of `targetDate` (yyyy-mm-dd), assuming `anchorBalance` is the
  * balance at end of `anchorDate` (after that day’s activity). Walks forward day
- * by day adding paychecks and subtracting scheduled outflows (bills, one-offs, expenses).
+ * by day adding paychecks and subtracting scheduled outflows (bills, one-offs,
+ * expenses). If the target is before the anchor, walks backward by reversing
+ * each day’s net checking change through the anchor date.
  */
 export function projectedBalanceEndOfDay(
   anchorDate: string,
@@ -59,36 +88,45 @@ export function projectedBalanceEndOfDay(
   incomeLines: IncomeLine[],
   savingsAccountTransfers: SavingsAccountTransfer[] = [],
 ): number {
-  if (targetDate < anchorDate) {
-    return anchorBalanceEndOfDay
-  }
   if (targetDate === anchorDate) {
     return anchorBalanceEndOfDay
   }
   let balance = anchorBalanceEndOfDay
   const checkingBills = billsForCheckingProjection(bills)
+  if (targetDate < anchorDate) {
+    const intervalStart = addDays(startOfDay(parseISO(targetDate)), 1)
+    const intervalEnd = startOfDay(parseISO(anchorDate))
+    for (const d of eachDayOfInterval({
+      start: intervalStart,
+      end: intervalEnd,
+    })) {
+      balance -= checkingBalanceChangeForDay(
+        d,
+        paySettings,
+        checkingBills,
+        oneOffItems,
+        expenseEntries,
+        incomeLines,
+        savingsAccountTransfers,
+      )
+    }
+    return balance
+  }
   const intervalStart = addDays(startOfDay(parseISO(anchorDate)), 1)
   const intervalEnd = startOfDay(parseISO(targetDate))
   for (const d of eachDayOfInterval({
     start: intervalStart,
     end: intervalEnd,
   })) {
-    const dayStart = startOfDay(d)
-    const dayEnd = addDays(dayStart, 1)
-    const flows = mergedDayOutflows(d, checkingBills, oneOffItems, expenseEntries)
-    const out = totalAmount(flows)
-    const th = estimatedTakeHomeInRange(
-      dayStart,
-      dayEnd,
+    balance += checkingBalanceChangeForDay(
+      d,
       paySettings,
+      checkingBills,
+      oneOffItems,
+      expenseEntries,
       incomeLines,
-    )
-    const inc = th ? th.total : 0
-    const { toSavings, fromSavings } = savingsTransferCheckingEffectForDay(
-      toISODate(d),
       savingsAccountTransfers,
     )
-    balance += inc - out - toSavings + fromSavings
   }
   return balance
 }
