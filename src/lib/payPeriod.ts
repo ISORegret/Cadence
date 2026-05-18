@@ -543,6 +543,30 @@ export function incomeForPeriodStarting(
   return a ?? b
 }
 
+export type PaydayIncome = {
+  iso: string
+  amount: number
+}
+
+export function paydayIncomeInOpenRange(
+  rangeStart: Date,
+  rangeEndExclusive: Date,
+  settings: PaySettings,
+): PaydayIncome[] {
+  return [...listPaydayDatesInOpenRange(rangeStart, rangeEndExclusive, settings)]
+    .sort((a, b) => a.localeCompare(b))
+    .map((iso) => {
+      const amount = incomeForPeriodStarting(startOfDay(parseISO(iso)), settings)
+      return {
+        iso,
+        amount:
+          amount !== null && typeof amount === 'number' && !Number.isNaN(amount)
+            ? amount
+            : 0,
+      }
+    })
+}
+
 /**
  * Sum of take-home + extra income lines for each payday in
  * `[rangeStart, rangeEndExclusive)`, using the same rules as Summary’s current
