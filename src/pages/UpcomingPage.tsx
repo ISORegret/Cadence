@@ -5,6 +5,7 @@ import { categoryChipClasses, categoryDotClass } from '../lib/categoryColors'
 import { formatMoney } from '../lib/money'
 import {
   getPayPeriodAtOffset,
+  incomeForPeriodStarting,
   payPeriodInclusiveLastDay,
   groupOutflowsByDate,
   listExpenseOutflowsInRange,
@@ -15,7 +16,7 @@ import {
   paidKeyForOutflow,
   toISODate,
 } from '../lib/payPeriod'
-import type { Bill, ExpenseEntry, OneOffItem, Outflow } from '../types'
+import type { Bill, ExpenseEntry, OneOffItem, Outflow, PaySettings } from '../types'
 import { PageUndo } from '../components/PageUndo'
 import { useFinanceStore } from '../store/financeStore'
 
@@ -31,6 +32,22 @@ function mergedOutflowsForRange(
     listOneOffOutflowsInRange(oneOffItems, rangeStart, rangeEndExclusive),
     listExpenseOutflowsInRange(expenseEntries, rangeStart, rangeEndExclusive),
   ])
+}
+
+function checkingOutflowsForRange(
+  rangeStart: Date,
+  rangeEndExclusive: Date,
+  bills: Bill[],
+  oneOffItems: OneOffItem[],
+  expenseEntries: ExpenseEntry[],
+) {
+  return mergedOutflowsForRange(
+    rangeStart,
+    rangeEndExclusive,
+    bills,
+    oneOffItems,
+    expenseEntries,
+  ).filter((o) => o.source !== 'bill' || (o.payFrom ?? 'checking') !== 'savings')
 }
 
 function allocateSavedAmountsByOutflow(
@@ -51,6 +68,31 @@ function allocateSavedAmountsByOutflow(
     savedByOutflow.set(paidKeyForOutflow(o), applied)
   }
   return savedByOutflow
+}
+
+function scheduledTotalAfterSaved(
+  flows: Outflow[],
+  savedByOutflow: Map<string, number>,
+): number {
+  return flows.reduce((sum, o) => {
+    const saved = savedByOutflow.get(paidKeyForOutflow(o)) ?? 0
+    return sum + Math.max(0, o.amount - saved)
+  }, 0)
+}
+
+function incomeForPaydayIso(iso: string, paySettings: PaySettings): number {
+  const amount = incomeForPeriodStarting(parseISO(iso), paySettings)
+  return typeof amount === 'number' && Number.isFinite(amount) ? amount : 0
+}
+
+function incomeForPeriodPaydays(
+  paydayIsos: string[],
+  paySettings: PaySettings,
+): number {
+  return paydayIsos.reduce(
+    (sum, iso) => sum + incomeForPaydayIso(iso, paySettings),
+    0,
+  )
 }
 
 export function UpcomingPage() {
@@ -98,16 +140,30 @@ export function UpcomingPage() {
     [outflows],
   )
   const byDate = useMemo(() => groupOutflowsByDate(checkingOutflows), [checkingOutflows])
-  const savedAppliedByOutflow = useMemo(
-    () => allocateSavedAmountsByOutflow(checkingOutflows, billSavedMap),
-    [checkingOutflows, billSavedMap],
-  )
+  const savedAppliedByOutflow = useMemo(() => {
+    if (!period || !paySettings) return new Map<string, number>()
+    const currentPeriod = getPayPeriodAtOffset(new Date(), paySettings, 0)
+    const allocationStart =
+      periodOffset > 0 ? currentPeriod.intervalStart : period.intervalStart
+    const allocationFlows = checkingOutflowsForRange(
+      allocationStart,
+      period.intervalEndExclusive,
+      bills,
+      oneOffItems,
+      expenseEntries,
+    )
+    return allocateSavedAmountsByOutflow(allocationFlows, billSavedMap)
+  }, [
+    period,
+    paySettings,
+    periodOffset,
+    bills,
+    oneOffItems,
+    expenseEntries,
+    billSavedMap,
+  ])
   const periodScheduledTotal = useMemo(
-    () =>
-      checkingOutflows.reduce((sum, o) => {
-        const saved = savedAppliedByOutflow.get(paidKeyForOutflow(o)) ?? 0
-        return sum + Math.max(0, o.amount - saved)
-      }, 0),
+    () => scheduledTotalAfterSaved(checkingOutflows, savedAppliedByOutflow),
     [checkingOutflows, savedAppliedByOutflow],
   )
   const periodPaidTotal = useMemo(
@@ -140,43 +196,50 @@ export function UpcomingPage() {
     ].sort((a, b) => a.localeCompare(b))
   }, [paySettings, period])
 
-  const primaryPayAmount =
-    typeof paySettings?.incomePerPaycheck === 'number' ? paySettings.incomePerPaycheck : 0
-  const periodIncome = paydaysInPeriod.length * primaryPayAmount
+  const periodPayAmounts = useMemo(() => {
+    if (!paySettings) return []
+    return paydaysInPeriod.map((iso) => incomeForPaydayIso(iso, paySettings))
+  }, [paySettings, paydaysInPeriod])
+  const periodIncome = periodPayAmounts.reduce((sum, amount) => sum + amount, 0)
   const rolloverBalance = useMemo(() => {
     if (!period || !paySettings) return 0
     if (periodOffset <= 0) return 0
     let total = 0
+    const priorCheckingFlows: Outflow[] = []
     for (let offset = 0; offset < periodOffset; offset += 1) {
       const p = getPayPeriodAtOffset(new Date(), paySettings, offset)
-      const flows = mergedOutflowsForRange(
+      priorCheckingFlows.push(
+        ...checkingOutflowsForRange(
+          p.intervalStart,
+          p.intervalEndExclusive,
+          bills,
+          oneOffItems,
+          expenseEntries,
+        ),
+      )
+    }
+    const savedByOutflow = allocateSavedAmountsByOutflow(
+      priorCheckingFlows,
+      billSavedMap,
+    )
+    for (let offset = 0; offset < periodOffset; offset += 1) {
+      const p = getPayPeriodAtOffset(new Date(), paySettings, offset)
+      const checkingFlows = checkingOutflowsForRange(
         p.intervalStart,
         p.intervalEndExclusive,
         bills,
         oneOffItems,
         expenseEntries,
       )
-      const checkingFlows = flows.filter(
-        (o) => o.source !== 'bill' || (o.payFrom ?? 'checking') !== 'savings',
-      )
-      const savedByOutflow = allocateSavedAmountsByOutflow(
-        checkingFlows,
-        billSavedMap,
-      )
-      const paid = checkingFlows.reduce((sum, o) => {
-        const pk = paidKeyForOutflow(o)
-        if (!paidOutflowKeys.includes(pk)) return sum
-        const saved = savedByOutflow.get(pk) ?? 0
-        return sum + Math.max(0, o.amount - saved)
-      }, 0)
-      const payCount = [
+      const scheduled = scheduledTotalAfterSaved(checkingFlows, savedByOutflow)
+      const paydays = [
         ...listPaydayDatesInOpenRange(
           p.intervalStart,
           p.intervalEndExclusive,
           paySettings,
         ),
-      ].length
-      total += payCount * primaryPayAmount - paid
+      ]
+      total += incomeForPeriodPaydays(paydays, paySettings) - scheduled
     }
     return total
   }, [
@@ -186,13 +249,11 @@ export function UpcomingPage() {
     bills,
     oneOffItems,
     expenseEntries,
-    primaryPayAmount,
     billSavedMap,
-    paidOutflowKeys,
   ])
 
   const availableThisPeriod = rolloverBalance + periodIncome
-  const endingRollover = availableThisPeriod - periodPaidTotal
+  const endingRollover = availableThisPeriod - periodScheduledTotal
 
   const calendarDays = useMemo(() => {
     if (!period) return []
@@ -297,8 +358,12 @@ export function UpcomingPage() {
         <div className="card-tight border border-emerald-200/80 bg-emerald-50/80 text-sm text-emerald-950 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-100">
           <p className="font-semibold">Paycheck{paydaysInPeriod.length > 1 ? 's' : ''} this period</p>
           <p className="mt-1 text-xs opacity-90">
-            {paydaysInPeriod.map((iso) => format(parseISO(iso), 'EEE MMM d')).join(' · ')} —{' '}
-            using {money(primaryPayAmount)} per paycheck
+            {paydaysInPeriod
+              .map(
+                (iso, idx) =>
+                  `${format(parseISO(iso), 'EEE MMM d')} (${money(periodPayAmounts[idx] ?? 0)})`,
+              )
+              .join(' · ')}
           </p>
         </div>
       ) : null}
@@ -354,7 +419,7 @@ export function UpcomingPage() {
               {money(endingRollover)}
             </p>
             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-              Based on {money(periodPaidTotal)} marked paid this period
+              Based on {money(periodScheduledTotal)} scheduled after saved amounts
             </p>
           </div>
         </div>

@@ -63,6 +63,15 @@ function sanitizeBill(b: Bill): Bill {
   return x as unknown as Bill
 }
 
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function normalizeAppendedBillDraft(draft: Omit<Bill, 'id'>): Omit<Bill, 'id'> {
+  if (draft.schedule.kind === 'once' || draft.startDate) return draft
+  return { ...draft, startDate: todayIsoDate() }
+}
+
 function sanitizeSavingsTransfers(
   xs: SavingsAccountTransfer[] | undefined,
 ): SavingsAccountTransfer[] {
@@ -564,7 +573,7 @@ export const useFinanceStore = create<FinanceState>()(
         set((state) => {
           if (drafts.length === 0) return state
           const added = drafts.map((d) =>
-            sanitizeBill({ ...d, id: newId() }),
+            sanitizeBill({ ...normalizeAppendedBillDraft(d), id: newId() }),
           )
           return {
             ...withUndo(state, { bills: [...state.bills, ...added] }),
