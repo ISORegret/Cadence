@@ -563,8 +563,16 @@ export const useFinanceStore = create<FinanceState>()(
       appendBills: (drafts) =>
         set((state) => {
           if (drafts.length === 0) return state
+          const todayIso = new Date().toISOString().slice(0, 10)
           const added = drafts.map((d) =>
-            sanitizeBill({ ...d, id: newId() }),
+            sanitizeBill({
+              ...d,
+              id: newId(),
+              startDate:
+                d.schedule.kind === 'once'
+                  ? undefined
+                  : d.startDate ?? todayIso,
+            }),
           )
           return {
             ...withUndo(state, { bills: [...state.bills, ...added] }),

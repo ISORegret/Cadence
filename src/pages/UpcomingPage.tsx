@@ -5,6 +5,7 @@ import { categoryChipClasses, categoryDotClass } from '../lib/categoryColors'
 import { formatMoney } from '../lib/money'
 import {
   getPayPeriodAtOffset,
+  estimatedTakeHomeInRange,
   payPeriodInclusiveLastDay,
   groupOutflowsByDate,
   listExpenseOutflowsInRange,
@@ -58,6 +59,7 @@ export function UpcomingPage() {
   const bills = useFinanceStore((s) => s.bills)
   const oneOffItems = useFinanceStore((s) => s.oneOffItems)
   const expenseEntries = useFinanceStore((s) => s.expenseEntries)
+  const incomeLines = useFinanceStore((s) => s.incomeLines)
   const paidOutflowKeys = useFinanceStore((s) => s.paidOutflowKeys)
   const togglePaidKey = useFinanceStore((s) => s.togglePaidKey)
 
@@ -140,9 +142,17 @@ export function UpcomingPage() {
     ].sort((a, b) => a.localeCompare(b))
   }, [paySettings, period])
 
-  const primaryPayAmount =
-    typeof paySettings?.incomePerPaycheck === 'number' ? paySettings.incomePerPaycheck : 0
-  const periodIncome = paydaysInPeriod.length * primaryPayAmount
+  const periodIncome = useMemo(() => {
+    if (!paySettings || !period) return 0
+    return (
+      estimatedTakeHomeInRange(
+        period.intervalStart,
+        period.intervalEndExclusive,
+        paySettings,
+        incomeLines,
+      )?.total ?? 0
+    )
+  }, [paySettings, period, incomeLines])
   const rolloverBalance = useMemo(() => {
     if (!period || !paySettings) return 0
     if (periodOffset <= 0) return 0
@@ -169,14 +179,14 @@ export function UpcomingPage() {
         const saved = savedByOutflow.get(pk) ?? 0
         return sum + Math.max(0, o.amount - saved)
       }, 0)
-      const payCount = [
-        ...listPaydayDatesInOpenRange(
+      const takeHome =
+        estimatedTakeHomeInRange(
           p.intervalStart,
           p.intervalEndExclusive,
           paySettings,
-        ),
-      ].length
-      total += payCount * primaryPayAmount - paid
+          incomeLines,
+        )?.total ?? 0
+      total += takeHome - paid
     }
     return total
   }, [
@@ -186,7 +196,7 @@ export function UpcomingPage() {
     bills,
     oneOffItems,
     expenseEntries,
-    primaryPayAmount,
+    incomeLines,
     billSavedMap,
     paidOutflowKeys,
   ])
@@ -298,7 +308,7 @@ export function UpcomingPage() {
           <p className="font-semibold">Paycheck{paydaysInPeriod.length > 1 ? 's' : ''} this period</p>
           <p className="mt-1 text-xs opacity-90">
             {paydaysInPeriod.map((iso) => format(parseISO(iso), 'EEE MMM d')).join(' · ')} —{' '}
-            using {money(primaryPayAmount)} per paycheck
+            estimated take-home {money(periodIncome)}
           </p>
         </div>
       ) : null}
