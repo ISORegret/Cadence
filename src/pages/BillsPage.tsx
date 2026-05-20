@@ -182,9 +182,12 @@ export function BillsPage() {
         ? (payFromRaw as 'checking' | 'savings')
         : 'checking'
     const savedRaw = Number(fd.get('savedAmount'))
-    const savedAmount =
-      Number.isFinite(savedRaw) && savedRaw > 0
+    const savedAmount = fd.has('savedAmount')
+      ? Number.isFinite(savedRaw) && savedRaw > 0
         ? Math.max(0, Math.min(amount, savedRaw))
+        : 0
+      : editingId
+        ? Math.max(0, Math.min(amount, editing?.savedAmount ?? 0))
         : 0
 
     if (!editingId) {
